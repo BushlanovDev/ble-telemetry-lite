@@ -17,8 +17,8 @@
 ### Подключение
 
 
-<img src="https://gitflic.ru/project/dronecontrolru/ble-telemetry-light/blob/raw?file=images%2Fesp32-c3-supermini_to_rm_pocket.jpg" width="50%" alt="ESP32-C3-SuperMini"/>
-
+<img src="https://gitflic.ru/project/dronecontrolru/ble-telemetry-light/blob/raw?file=images%2Fesp32-c3-supermini_top.jpg" width="50%" alt="ESP32-C3-SuperMini"/>
+<img src="https://gitflic.ru/project/dronecontrolru/ble-telemetry-light/blob/raw?file=images%2Fesp32-c3-supermini_bottom.jpg" width="50%" alt="ESP32-C3-SuperMini"/>
 ### Прошивка
 
 На данный момент можно собрать проект в VSCode с плагином Platformio и залить с его помощью. В дальнейшем планируется сделать веб-конфигуратор.
