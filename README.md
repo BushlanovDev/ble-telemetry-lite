@@ -12,14 +12,12 @@
 Плата разработчиков с микроконтроллером **ESP32-C3-SuperMini**.
 
 
-![ESP32-C3-SuperMini](https://gitflic.ru/project/dronecontrolru/ble-telemetry-light/blob/raw?file=images%2Fesp32-c3-supermini_to_rm_pocket.jpg)
-
 Подойдут любые платы с **ESP32-C3**, но предлагаемая - самая компактная, дешевая, не обвешенная лишними компонентами. Если используете другие платы, помните, что указанные номера контактов для подключения, соответствуют номерам контактов микроконтроллера. На других платах нумерация контактов платы может быть изменена и не соответствовать нумерации процессора. В таком случае смотрите даташит на вашу плату, чтобы найти нужные контакты.
 
 ### Подключение
 
 
-
+<img src="https://gitflic.ru/project/dronecontrolru/ble-telemetry-light/blob/raw?file=images%2Fesp32-c3-supermini_to_rm_pocket.jpg" width="50%" alt="ESP32-C3-SuperMini"/>
 
 ### Прошивка
 
