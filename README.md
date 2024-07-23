@@ -11,13 +11,13 @@
 ### Что потребуется?
 Плата разработчика **ESP32-C3-SuperMini** с микроконтроллером **ESP32-C3**. Обратите внимание - платы с другими микроконтроллерами семейства **ESP32** - не подойдут.
 
-<img src="https://gitflic.ru/project/dronecontrolru/ble-telemetry-lite/blob/raw?file=images%2Fesp32-c3-supermini_top.jpg" width="50%" alt="ESP32-C3-SuperMini"/>
+<img src="https://gitflic.ru/project/skydevices/ble-telemetry-lite/blob/raw?file=images%2Fesp32-c3-supermini_top.jpg" width="50%" alt="ESP32-C3-SuperMini"/>
 
 Предлагаемая плата -  компактная и не дорогая, не обвешенна лишними компонентами. Если используете другие платы с микроконтроллером **ESP32-C3**, помните - номера контактов для подключения, соответствуют номерам контактов микроконтроллера. На других платах нумерация контактов платы может быть изменена и не соответствовать нумерации процессора. В таком случае смотрите даташит на вашу плату, чтобы найти нужные контакты.
 
 ### Подключение
 
-<img src="https://gitflic.ru/project/dronecontrolru/ble-telemetry-lite/blob/raw?file=images%2Fesp32-c3-supermini_bottom.jpg" width="50%" alt="ESP32-C3-SuperMini"/>
+<img src="https://gitflic.ru/project/skydevices/ble-telemetry-lite/blob/raw?file=images%2Fesp32-c3-supermini_bottom.jpg" width="50%" alt="ESP32-C3-SuperMini"/>
 ### Прошивка
 
 На данный момент можно собрать проект в VSCode с плагином Platformio и залить с его помощью. В дальнейшем планируется сделать веб-конфигуратор.
