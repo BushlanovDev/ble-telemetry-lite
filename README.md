@@ -1,4 +1,4 @@
-# BLE Telemetry Light
+# BLE Telemetry Lite
 
 ПО для микроконтроллеров **ESP32-C3**.
 
