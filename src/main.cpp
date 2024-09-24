@@ -1,8 +1,8 @@
 #include "main.h"
 #include <NimBLEDevice.h>
-#include <WiFi.h>
-#include <WiFiAP.h>
-#include <AsyncUDP.h>
+// #include <WiFi.h>
+// #include <WiFiAP.h>
+// #include <AsyncUDP.h>
 
 Preferences preferences;
 
@@ -11,13 +11,17 @@ HardwareSerial SerialPort(SERIAL_PORT);
 uint8_t serial_buffer_rx[SERIAL_BUFFER_LENGTH];
 uint32_t serial_baudrate = DEFAULT_SERIAL_BAUDRATE;
 std::string domain_name = DEFAULT_DOMAIN_NAME;
+/*
 std::string password = DEFAULT_PASSWORD;
 std::string protocol = DEFAULT_PROTOCOL;
 uint16_t port = DEFAULT_PORT;
+
 uint8_t mode = 0;
 
 
 AsyncUDP udp;
+*/
+
 
 NimBLEAdvertising *pAdvertising;
 NimBLEServer *pServer;
@@ -31,10 +35,13 @@ NimBLECharacteristic *pCharacteristicRX;
 
 NimBLECharacteristic *pCharacteristicBaudrate;
 NimBLECharacteristic *pCharacteristicDomain;
+
+/*
 NimBLECharacteristic *pCharacteristicPassword;
 NimBLECharacteristic *pCharacteristicProtocol;
 NimBLECharacteristic *pCharacteristicPort;
 NimBLECharacteristic *pCharacteristicMode;
+*/
 
 void initSerial()
 {
@@ -44,7 +51,7 @@ void initSerial()
 
 
 class CharacteristicCallbacks: public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic) {
+    void IRAM_ATTR onWrite(NimBLECharacteristic* pCharacteristic) {
         if(pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID()) {
             serial_baudrate = *(uint32_t*)pCharacteristic->getValue().data();
             preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, (uint32_t)serial_baudrate);
@@ -57,7 +64,8 @@ class CharacteristicCallbacks: public NimBLECharacteristicCallbacks {
             NimBLEDevice::setDeviceName(domain_name);
             pAdvertising = NimBLEDevice::getAdvertising();
             pAdvertising->setName(domain_name);
-        } else if (pCharacteristic->getUUID() == pCharacteristicPassword->getUUID()) {
+        } 
+        /* else if (pCharacteristic->getUUID() == pCharacteristicPassword->getUUID()) {
             preferences.putBytes(PREFERENCES_REC_PASSWORD, (char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
         } else if (pCharacteristic->getUUID() == pCharacteristicProtocol->getUUID()) {
             preferences.putBytes(PREFERENCES_REC_PROTOCOL, (char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
@@ -69,18 +77,21 @@ class CharacteristicCallbacks: public NimBLECharacteristicCallbacks {
             preferences.putUInt(PREFERENCES_REC_MODE, (uint32_t)mode);
             esp_restart();
         }
+        */
     };
 };
 
 static CharacteristicCallbacks chrCallbacks;
 
+/*
 void onUdpPacket(AsyncUDPPacket packet) {
     std::string str;
     str.assign((char*)packet.data(), packet.length());
     Serial.println(str.c_str());
 
-    udp.broadcastTo(packet.data(), packet.length(), port);
+    udp.broadcastTo(packet.data(), packet.length(), port + 1);
 }
+*/
 
 void initBLE()
 {
@@ -111,6 +122,7 @@ void initBLE()
     pCharacteristicDomain->setCallbacks(&chrCallbacks);
     pCharacteristicDomain->setValue(domain_name);
 
+/*
     pCharacteristicPassword = pServiceConfig->createCharacteristic("FFF3", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
     pCharacteristicPassword->setCallbacks(&chrCallbacks);
     pCharacteristicPassword->setValue(password);
@@ -125,7 +137,7 @@ void initBLE()
 
     pCharacteristicMode = pServiceConfig->createCharacteristic("FFF8", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
     pCharacteristicMode->setCallbacks(&chrCallbacks);
-    
+*/
 
     pServiceExchange->start();
     pServiceConfig->start();
@@ -139,6 +151,7 @@ void initBLE()
     //NimBLEDevice::setPower(ESP_PWR_LVL_P21, ESP_BLE_PWR_TYPE_DEFAULT); // +9db
 }
 
+/*
 void initWiFi() {
     WiFi.mode(WIFI_MODE_AP);
     WiFi.softAP(domain_name.c_str(), password.c_str());
@@ -149,6 +162,7 @@ void initWiFi() {
     udp.onPacket(onUdpPacket);
     udp.listenMulticast(myIP, port);
 }   
+*/
 
 void initPreferences()
 {
@@ -170,6 +184,7 @@ void initPreferences()
         domain_name.assign(domain_name_buffer, buffer_length);
     }
 
+/*
     if (!preferences.isKey(PREFERENCES_REC_PASSWORD))
     {
         preferences.putBytes(PREFERENCES_REC_PASSWORD, password.c_str(), password.length());
@@ -201,6 +216,7 @@ void initPreferences()
     {
         mode = (uint8_t)preferences.getUInt(PREFERENCES_REC_MODE);
     }
+*/
 }
 
 void setup()
@@ -208,21 +224,20 @@ void setup()
     pinMode(LED_PIN, OUTPUT);
     pinMode(BOOT_PIN, INPUT);   
     initPreferences();
-    delay(1500);
+    delay(500);
     initSerial();
-    delay(1500);
-    Serial.println("Hello");
-    if (mode > 0) {
-        digitalWrite(LED_PIN, 1);
-        initWiFi();
-    } else {
+
+    //if (mode > 0) {
+    //    digitalWrite(LED_PIN, 1);
+    //    initWiFi();
+    //} else {
         initBLE();
-    }
+    //}
     
     
 }
 
-void loop()
+void IRAM_ATTR loop()
 {
     
     if(digitalRead(BOOT_PIN) == 0) {
@@ -233,11 +248,11 @@ void loop()
     if (SerialPort.available())
     {
         size_t bytes = SerialPort.read(serial_buffer_rx, 64);
-        if (mode == 1) {
-                udp.broadcastTo(serial_buffer_rx, bytes, port);
-        } else {
+        //if (mode == 1) {
+        //        udp.broadcastTo(serial_buffer_rx, bytes, port);
+        //} else {
             pCharacteristicTX->notify(serial_buffer_rx, bytes, true);
-        }
+        //}
         
     }
 }

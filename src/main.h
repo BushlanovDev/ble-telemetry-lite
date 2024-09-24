@@ -34,3 +34,5 @@
 #define DEFAULT_PASSWORD "12345678"
 #define DEFAULT_PROTOCOL "UDP"
 #define DEFAULT_PORT 14550
+
+#include "esp_attr.h"
