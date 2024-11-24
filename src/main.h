@@ -32,7 +32,7 @@
 #define IP_ADDRESS 10,0,0,0
 #define VENDOR "SkyDevices.ru"
 #define MODEL "BLE Telemetry Lite"
-#define FIRMWARE "0.2.0"
+#define FIRMWARE "0.2.1"
 
 // Default values
 #define DEFAULT_SERIAL_BAUDRATE 115200

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import JSZip from 'jszip';
 
-const version = '0.2.0';
+const version = '0.2.1';
 
 console.log('Building');
 let ide_data = fs.readFileSync('./.pio/build/esp32c3supermini/idedata.json', {encoding: 'utf-8'});
