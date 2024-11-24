@@ -21,6 +21,12 @@
 #define PREFERENCES_REC_PROTOCOL "protocol"
 #define PREFERENCES_REC_PORT "port"
 #define PREFERENCES_REC_MODE "mode"
+#define PREFERENCES_REC_PIN_TX "pin_tx"
+#define PREFERENCES_REC_PIN_RX "pin_rx"
+#define PREFERENCES_REC_PIN_PPM "pin_ppm"
+#define PREFERENCES_REC_PIN_KEY "pin_boot"
+#define PREFERENCES_REC_PIN_LED "pin_led"
+#define PREFERENCES_REC_LED_MODE "led_mode"
 
 // Const values
 #define IP_ADDRESS 10,0,0,0

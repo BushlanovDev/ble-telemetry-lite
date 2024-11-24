@@ -11,7 +11,7 @@ HardwareSerial SerialPort(SERIAL_PORT);
 uint8_t serial_buffer_rx[SERIAL_BUFFER_LENGTH];
 uint32_t serial_baudrate = DEFAULT_SERIAL_BAUDRATE;
 std::string domain_name = DEFAULT_DOMAIN_NAME;
-/*
+
 std::string password = DEFAULT_PASSWORD;
 std::string protocol = DEFAULT_PROTOCOL;
 uint16_t port = DEFAULT_PORT;
@@ -19,6 +19,13 @@ uint16_t port = DEFAULT_PORT;
 uint8_t mode = 0;
 
 
+uint8_t pin_rx = 0xff;
+uint8_t pin_tx = 0xff;
+uint8_t pin_ppm = 0xff;
+uint8_t pin_key = 0xff;
+uint8_t pin_led = 0xff;
+uint8_t led_mode = 0x00;
+/*
 AsyncUDP udp;
 */
 
@@ -36,13 +43,6 @@ NimBLECharacteristic *pCharacteristicRX;
 NimBLECharacteristic *pCharacteristicBaudrate;
 NimBLECharacteristic *pCharacteristicDomain;
 
-/*
-NimBLECharacteristic *pCharacteristicPassword;
-NimBLECharacteristic *pCharacteristicProtocol;
-NimBLECharacteristic *pCharacteristicPort;
-NimBLECharacteristic *pCharacteristicMode;
-*/
-
 void initSerial()
 {
     Serial.begin(115200);
@@ -56,28 +56,13 @@ class CharacteristicCallbacks: public NimBLECharacteristicCallbacks {
             serial_baudrate = *(uint32_t*)pCharacteristic->getValue().data();
             preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, (uint32_t)serial_baudrate);
             SerialPort.updateBaudRate(serial_baudrate);
-        } else if (pCharacteristic->getUUID() == pCharacteristicRX->getUUID()) {
-            SerialPort.print(pCharacteristic->getValue().c_str());
         } else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID()) {
             domain_name.assign((char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
             preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, (char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
             NimBLEDevice::setDeviceName(domain_name);
             pAdvertising = NimBLEDevice::getAdvertising();
             pAdvertising->setName(domain_name);
-        } 
-        /* else if (pCharacteristic->getUUID() == pCharacteristicPassword->getUUID()) {
-            preferences.putBytes(PREFERENCES_REC_PASSWORD, (char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
-        } else if (pCharacteristic->getUUID() == pCharacteristicProtocol->getUUID()) {
-            preferences.putBytes(PREFERENCES_REC_PROTOCOL, (char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
-        } else if (pCharacteristic->getUUID() == pCharacteristicPort->getUUID()) {
-            port = *(uint16_t*)pCharacteristic->getValue().data();
-            preferences.putUInt(PREFERENCES_REC_PORT, (uint32_t)port);
-        } else if (pCharacteristic->getUUID() == pCharacteristicMode->getUUID()) {
-            mode = *(uint8_t*)pCharacteristic->getValue().data();
-            preferences.putUInt(PREFERENCES_REC_MODE, (uint32_t)mode);
-            esp_restart();
         }
-        */
     };
 };
 
@@ -122,22 +107,6 @@ void initBLE()
     pCharacteristicDomain->setCallbacks(&chrCallbacks);
     pCharacteristicDomain->setValue(domain_name);
 
-/*
-    pCharacteristicPassword = pServiceConfig->createCharacteristic("FFF3", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
-    pCharacteristicPassword->setCallbacks(&chrCallbacks);
-    pCharacteristicPassword->setValue(password);
-
-    pCharacteristicProtocol = pServiceConfig->createCharacteristic("FFF4", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
-    pCharacteristicProtocol->setCallbacks(&chrCallbacks);
-    pCharacteristicProtocol->setValue(protocol);
-
-    pCharacteristicPort = pServiceConfig->createCharacteristic("FFF5", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
-    pCharacteristicPort->setCallbacks(&chrCallbacks);
-    pCharacteristicPort->setValue(port);
-
-    pCharacteristicMode = pServiceConfig->createCharacteristic("FFF8", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
-    pCharacteristicMode->setCallbacks(&chrCallbacks);
-*/
 
     pServiceExchange->start();
     pServiceConfig->start();
