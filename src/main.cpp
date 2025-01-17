@@ -117,7 +117,7 @@ void initBLE()
     pAdvertising->addServiceUUID("FFF1");
     pAdvertising->start();
 
-    //NimBLEDevice::setPower(ESP_PWR_LVL_P21, ESP_BLE_PWR_TYPE_DEFAULT); // +9db
+    NimBLEDevice::setPower(ESP_PWR_LVL_P21, ESP_BLE_PWR_TYPE_DEFAULT); // +9db
 }
 
 /*
