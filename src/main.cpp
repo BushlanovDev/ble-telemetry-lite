@@ -18,17 +18,15 @@ uint16_t port = DEFAULT_PORT;
 
 uint8_t mode = 0;
 
-
-uint8_t pin_rx = 0xff;
-uint8_t pin_tx = 0xff;
-uint8_t pin_ppm = 0xff;
-uint8_t pin_key = 0xff;
-uint8_t pin_led = 0xff;
+uint8_t pin_rx = 0xFF;
+uint8_t pin_tx = 0xFF;
+uint8_t pin_ppm = 0xFF;
+uint8_t pin_key = 0xFF;
+uint8_t pin_led = 0xFF;
 uint8_t led_mode = 0x00;
 /*
 AsyncUDP udp;
 */
-
 
 NimBLEAdvertising *pAdvertising;
 NimBLEServer *pServer;
@@ -43,27 +41,23 @@ NimBLECharacteristic *pCharacteristicRX;
 NimBLECharacteristic *pCharacteristicBaudrate;
 NimBLECharacteristic *pCharacteristicDomain;
 
-void initSerial()
-{
-    Serial.begin(115200);
-    SerialPort.begin(serial_baudrate, SERIAL_MODE, SERIAL_PIN_RX, SERIAL_PIN_TX);
-}
-
-
 class CharacteristicCallbacks: public NimBLECharacteristicCallbacks {
     void IRAM_ATTR onWrite(NimBLECharacteristic* pCharacteristic) {
-        if(pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID()) {
+        if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID())
+        {
             serial_baudrate = *(uint32_t*)pCharacteristic->getValue().data();
             preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, (uint32_t)serial_baudrate);
             SerialPort.updateBaudRate(serial_baudrate);
-        } else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID()) {
+        }
+        else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID())
+        {
             domain_name.assign((char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
             preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, (char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
             NimBLEDevice::setDeviceName(domain_name);
             pAdvertising = NimBLEDevice::getAdvertising();
             pAdvertising->setName(domain_name);
         }
-    };
+    }
 };
 
 static CharacteristicCallbacks chrCallbacks;
@@ -78,10 +72,15 @@ void onUdpPacket(AsyncUDPPacket packet) {
 }
 */
 
+void initSerial()
+{
+    Serial.begin(115200);
+    SerialPort.begin(serial_baudrate, SERIAL_MODE, SERIAL_PIN_RX, SERIAL_PIN_TX);
+}
+
 void initBLE()
 {
     NimBLEDevice::init(domain_name);
-
     pServer = NimBLEDevice::createServer();
 
     NimBLEService *pServiceInformation = pServer->createService("180A");
@@ -106,7 +105,6 @@ void initBLE()
     pCharacteristicDomain = pServiceConfig->createCharacteristic("FFF2", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
     pCharacteristicDomain->setCallbacks(&chrCallbacks);
     pCharacteristicDomain->setValue(domain_name);
-
 
     pServiceExchange->start();
     pServiceConfig->start();
@@ -191,7 +189,7 @@ void initPreferences()
 void setup()
 {
     pinMode(LED_PIN, OUTPUT);
-    pinMode(BOOT_PIN, INPUT);   
+    pinMode(BOOT_PIN, INPUT);
     initPreferences();
     delay(500);
     initSerial();
@@ -202,18 +200,16 @@ void setup()
     //} else {
         initBLE();
     //}
-    
-    
 }
 
 void IRAM_ATTR loop()
 {
-    
-    if(digitalRead(BOOT_PIN) == 0) {
+    if (digitalRead(BOOT_PIN) == 0)
+    {
         preferences.putUInt(PREFERENCES_REC_MODE, 0);
         esp_restart();
     }
-    
+
     if (SerialPort.available())
     {
         size_t bytes = SerialPort.read(serial_buffer_rx, 64);
@@ -222,6 +218,5 @@ void IRAM_ATTR loop()
         //} else {
             pCharacteristicTX->notify(serial_buffer_rx, bytes, true);
         //}
-        
     }
 }
