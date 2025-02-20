@@ -41,8 +41,20 @@ NimBLECharacteristic *pCharacteristicRX;
 NimBLECharacteristic *pCharacteristicBaudrate;
 NimBLECharacteristic *pCharacteristicDomain;
 
-class CharacteristicCallbacks: public NimBLECharacteristicCallbacks {
-    void IRAM_ATTR onWrite(NimBLECharacteristic* pCharacteristic) {
+#ifdef MAIN_DEBUG
+class ServerCallbacks final : public BLEServerCallbacks {
+    void onConnect(BLEServer *pServer) override {
+        ESP_LOGI(TAG, "onConnect");
+    }
+
+    void onDisconnect(BLEServer *pServer) override {
+        ESP_LOGI(TAG, "onDisconnect");
+    }
+};
+#endif
+
+class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
+    void IRAM_ATTR onWrite(NimBLECharacteristic* pCharacteristic) override {
         if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID())
         {
             serial_baudrate = *(uint32_t*)pCharacteristic->getValue().data();
@@ -74,14 +86,17 @@ void onUdpPacket(AsyncUDPPacket packet) {
 
 void initSerial()
 {
-    Serial.begin(115200);
     SerialPort.begin(serial_baudrate, SERIAL_MODE, SERIAL_PIN_RX, SERIAL_PIN_TX);
+    ESP_LOGI(TAG, "Serial initialized");
 }
 
 void initBLE()
 {
     NimBLEDevice::init(domain_name);
     pServer = NimBLEDevice::createServer();
+#ifdef MAIN_DEBUG
+    pServer->setCallbacks(new ServerCallbacks());
+#endif
 
     NimBLEService *pServiceInformation = pServer->createService("180A");
     pCharacteristicVendor = pServiceInformation->createCharacteristic("2A29", NIMBLE_PROPERTY::READ);
@@ -115,20 +130,22 @@ void initBLE()
     pAdvertising->addServiceUUID("FFF1");
     pAdvertising->start();
 
-    NimBLEDevice::setPower(ESP_PWR_LVL_P21, ESP_BLE_PWR_TYPE_DEFAULT); // +9db
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT); // +9db
+
+    ESP_LOGI(TAG, "BLE initialized");
 }
 
 /*
 void initWiFi() {
     WiFi.mode(WIFI_MODE_AP);
     WiFi.softAP(domain_name.c_str(), password.c_str());
-    
+
     IPAddress myIP = WiFi.softAPIP();
     Serial.println(myIP);
 
     udp.onPacket(onUdpPacket);
     udp.listenMulticast(myIP, port);
-}   
+}
 */
 
 void initPreferences()
@@ -150,6 +167,8 @@ void initPreferences()
         int buffer_length = preferences.getBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name_buffer, 32);
         domain_name.assign(domain_name_buffer, buffer_length);
     }
+
+    ESP_LOGI(TAG, "Preferences initialized");
 
 /*
     if (!preferences.isKey(PREFERENCES_REC_PASSWORD))
@@ -188,6 +207,14 @@ void initPreferences()
 
 void setup()
 {
+#ifdef MAIN_DEBUG
+    Serial.begin(115200);
+    esp_log_level_set("*", ESP_LOG_INFO);
+#else
+    esp_log_level_set("*", ESP_LOG_NONE);
+#endif
+    delay(500);
+
     pinMode(LED_PIN, OUTPUT);
     pinMode(BOOT_PIN, INPUT);
     initPreferences();

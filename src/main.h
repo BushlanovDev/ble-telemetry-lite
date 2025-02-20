@@ -1,8 +1,14 @@
 #include "Arduino.h"
+#include "esp_attr.h"
+#include "esp_log.h"
 
 #include <Preferences.h>
 #include <stdint.h>
 #include <string>
+
+// Logging
+// #define MAIN_DEBUG
+#define TAG "MAIN"
 
 // Hardware
 #define SERIAL_PORT 1
@@ -40,5 +46,3 @@
 #define DEFAULT_PASSWORD "12345678"
 #define DEFAULT_PROTOCOL "UDP"
 #define DEFAULT_PORT 14550
-
-#include "esp_attr.h"
