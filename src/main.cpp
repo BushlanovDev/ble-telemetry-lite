@@ -41,17 +41,25 @@ NimBLECharacteristic *pCharacteristicRX;
 NimBLECharacteristic *pCharacteristicBaudrate;
 NimBLECharacteristic *pCharacteristicDomain;
 
-#ifdef MAIN_DEBUG
+bool deviceConnected = false;
+
 class ServerCallbacks final : public BLEServerCallbacks {
     void onConnect(BLEServer *pServer) override {
-        ESP_LOGI(TAG, "onConnect");
+        deviceConnected = true;
+        NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
+        ESP_LOGI(TAG, "onConnect power up");
     }
 
     void onDisconnect(BLEServer *pServer) override {
-        ESP_LOGI(TAG, "onDisconnect");
+        deviceConnected = false;
+        NimBLEDevice::setPower(ESP_PWR_LVL_P3, ESP_BLE_PWR_TYPE_DEFAULT);
+        ESP_LOGI(TAG, "onDisconnect power down");
+    }
+
+    void onMTUChange(uint16_t MTU, ble_gap_conn_desc *desc) override {
+        ESP_LOGI(TAG, "MTU updated: %u for connection ID: %u", MTU, desc->conn_handle);
     }
 };
-#endif
 
 class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
     void IRAM_ATTR onWrite(NimBLECharacteristic* pCharacteristic) override {
@@ -130,7 +138,8 @@ void initBLE()
     pAdvertising->addServiceUUID("FFF1");
     pAdvertising->start();
 
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT); // +9db
+    NimBLEDevice::setMTU(67);
+    NimBLEDevice::setPower(ESP_PWR_LVL_P3, ESP_BLE_PWR_TYPE_DEFAULT);
 
     ESP_LOGI(TAG, "BLE initialized");
 }
@@ -237,7 +246,7 @@ void IRAM_ATTR loop()
         esp_restart();
     }
 
-    if (SerialPort.available())
+    if (deviceConnected && SerialPort.available())
     {
         size_t bytes = SerialPort.read(serial_buffer_rx, 64);
         //if (mode == 1) {
@@ -245,5 +254,9 @@ void IRAM_ATTR loop()
         //} else {
             pCharacteristicTX->notify(serial_buffer_rx, bytes, true);
         //}
+    }
+    else
+    {
+        delay(20);
     }
 }
