@@ -46,13 +46,13 @@ bool deviceConnected = false;
 class ServerCallbacks final : public BLEServerCallbacks {
     void onConnect(BLEServer *pServer) override {
         deviceConnected = true;
-        NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
+        NimBLEDevice::setPower(DEFAULT_BLE_HIGH_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
         ESP_LOGI(TAG, "onConnect power up");
     }
 
     void onDisconnect(BLEServer *pServer) override {
         deviceConnected = false;
-        NimBLEDevice::setPower(ESP_PWR_LVL_P3, ESP_BLE_PWR_TYPE_DEFAULT);
+        NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
         ESP_LOGI(TAG, "onDisconnect power down");
     }
 
@@ -138,8 +138,8 @@ void initBLE()
     pAdvertising->addServiceUUID("FFF1");
     pAdvertising->start();
 
-    NimBLEDevice::setMTU(67);
-    NimBLEDevice::setPower(ESP_PWR_LVL_P3, ESP_BLE_PWR_TYPE_DEFAULT);
+    NimBLEDevice::setMTU(SERIAL_BUFFER_LENGTH + 3);
+    NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
 
     ESP_LOGI(TAG, "BLE initialized");
 }
@@ -217,12 +217,29 @@ void initPreferences()
 void setup()
 {
 #ifdef MAIN_DEBUG
-    Serial.begin(115200);
+    Serial.begin(DEFAULT_SERIAL_BAUDRATE);
     esp_log_level_set("*", ESP_LOG_INFO);
+    delay(500);
+    ESP_LOGI(TAG, "====================================");
+    ESP_LOGI(TAG, "CPU Freq: %i Mhz", getCpuFrequencyMhz());
+    ESP_LOGI(TAG, "Chip Model: %s", ESP.getChipModel());
+    ESP_LOGI(TAG, "Chip Revision: %d", ESP.getChipRevision());
+    ESP_LOGI(TAG, "Chip Cores %d", ESP.getChipCores());
+    ESP_LOGI(TAG, "Flash Chip Size : %d", ESP.getFlashChipSize());
+    ESP_LOGI(TAG, "Flash Chip Speed : %d", ESP.getFlashChipSpeed());
+    esp_chip_info_t chip_info;
+    esp_chip_info(&chip_info);
+    ESP_LOGI(TAG, "Features included: %s %s %s %s %s",
+        (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded flash," : "",
+        (chip_info.features & CHIP_FEATURE_WIFI_BGN) ? "2.4GHz WiFi," : "",
+        (chip_info.features & CHIP_FEATURE_BLE) ? "Bluetooth LE," : "",
+        (chip_info.features & CHIP_FEATURE_BT) ? "Bluetooth Classic," : "",
+        (chip_info.features & CHIP_FEATURE_IEEE802154) ? "IEEE 802.15.4," : "");
+
+    ESP_LOGI(TAG, "====================================");
 #else
     esp_log_level_set("*", ESP_LOG_NONE);
 #endif
-    delay(500);
 
     pinMode(LED_PIN, OUTPUT);
     pinMode(BOOT_PIN, INPUT);
@@ -246,17 +263,19 @@ void IRAM_ATTR loop()
         esp_restart();
     }
 
-    if (deviceConnected && SerialPort.available())
+    if (!deviceConnected)
     {
-        size_t bytes = SerialPort.read(serial_buffer_rx, 64);
+        delay(20);
+        return;
+    }
+
+    if (SerialPort.available())
+    {
+        size_t bytes = SerialPort.read(serial_buffer_rx, SERIAL_BUFFER_LENGTH);
         //if (mode == 1) {
         //        udp.broadcastTo(serial_buffer_rx, bytes, port);
         //} else {
             pCharacteristicTX->notify(serial_buffer_rx, bytes, true);
         //}
-    }
-    else
-    {
-        delay(20);
     }
 }
