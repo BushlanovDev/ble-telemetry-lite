@@ -1,7 +1,7 @@
-#include "Arduino.h"
-#include "esp_attr.h"
-#include "esp_log.h"
-
+#include <Arduino.h>
+#include <esp_attr.h>
+#include <esp_log.h>
+#include <NimBLEDevice.h>
 #include <Preferences.h>
 #include <stdint.h>
 #include <string>
@@ -39,6 +39,10 @@
 #define VENDOR "SkyDevices.ru"
 #define MODEL "BLE Telemetry Lite"
 #define FIRMWARE "0.2.1"
+
+// Protocol
+#define PING_PACKET_ID 0x28
+#define MIN_PAYLOAD_SIZE 4
 
 // Default values
 #define DEFAULT_SERIAL_BAUDRATE 115200

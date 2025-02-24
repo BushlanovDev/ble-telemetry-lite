@@ -1,5 +1,4 @@
 #include "main.h"
-#include <NimBLEDevice.h>
 // #include <WiFi.h>
 // #include <WiFiAP.h>
 // #include <AsyncUDP.h>
@@ -11,7 +10,7 @@ HardwareSerial SerialPort(SERIAL_PORT);
 uint8_t serial_buffer_rx[SERIAL_BUFFER_LENGTH];
 uint32_t serial_baudrate = DEFAULT_SERIAL_BAUDRATE;
 std::string domain_name = DEFAULT_DOMAIN_NAME;
-
+/*
 std::string password = DEFAULT_PASSWORD;
 std::string protocol = DEFAULT_PROTOCOL;
 uint16_t port = DEFAULT_PORT;
@@ -24,7 +23,7 @@ uint8_t pin_ppm = 0xFF;
 uint8_t pin_key = 0xFF;
 uint8_t pin_led = 0xFF;
 uint8_t led_mode = 0x00;
-/*
+
 AsyncUDP udp;
 */
 
@@ -68,6 +67,7 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
             serial_baudrate = *(uint32_t*)pCharacteristic->getValue().data();
             preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, (uint32_t)serial_baudrate);
             SerialPort.updateBaudRate(serial_baudrate);
+            ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serial_baudrate);
         }
         else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID())
         {
@@ -76,6 +76,7 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
             NimBLEDevice::setDeviceName(domain_name);
             pAdvertising = NimBLEDevice::getAdvertising();
             pAdvertising->setName(domain_name);
+            ESP_LOGI(TAG, "Domain name updated: %s", domain_name.c_str());
         }
     }
 };
@@ -133,7 +134,7 @@ void initBLE()
     pServiceConfig->start();
     pServiceInformation->start();
 
-    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID("FFF0");
     pAdvertising->addServiceUUID("FFF1");
     pAdvertising->start();
@@ -173,7 +174,7 @@ void initPreferences()
     else
     {
         char domain_name_buffer[32];
-        int buffer_length = preferences.getBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name_buffer, 32);
+        unsigned int buffer_length = preferences.getBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name_buffer, 32);
         domain_name.assign(domain_name_buffer, buffer_length);
     }
 
@@ -259,7 +260,7 @@ void IRAM_ATTR loop()
 {
     if (digitalRead(BOOT_PIN) == 0)
     {
-        preferences.putUInt(PREFERENCES_REC_MODE, 0);
+        // preferences.putUInt(PREFERENCES_REC_MODE, 0);
         esp_restart();
     }
 
