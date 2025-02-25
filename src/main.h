@@ -5,6 +5,9 @@
 #include <Preferences.h>
 #include <stdint.h>
 #include <string>
+#include <Update.h>
+#include <WiFi.h>
+#include <WebServer.h>
 
 // Logging
 // #define MAIN_DEBUG
@@ -34,6 +37,10 @@
 #define PREFERENCES_REC_PIN_LED "pin_led"
 #define PREFERENCES_REC_LED_MODE "led_mode"
 
+// Modes
+#define MODE_BLE 0
+#define MODE_WEB 1
+
 // Const values
 #define IP_ADDRESS 10,0,0,0
 #define VENDOR "SkyDevices.ru"
@@ -52,3 +59,38 @@
 #define DEFAULT_PORT 14550
 #define DEFAULT_BLE_LOW_PWR ESP_PWR_LVL_P3
 #define DEFAULT_BLE_HIGH_PWR ESP_PWR_LVL_P9
+
+// HTML pages
+const char *indexHtml = R"literal(
+<!DOCTYPE html>
+<body style='width:480px'>
+  <h2>Firmware Update</h2>
+  <form method='POST' enctype='multipart/form-data' id='upload-form'>
+    <input type='file' id='file' name='update'>
+    <input type='submit' value='Update'>
+  </form>
+  <br>
+  <div id='prg' style='width:0;color:white;text-align:center'>0%</div>
+</body>
+<script>
+var prg = document.getElementById('prg');
+var form = document.getElementById('upload-form');
+form.addEventListener('submit', el=>{
+  prg.style.backgroundColor = 'blue';
+  el.preventDefault();
+  var data = new FormData(form);
+  var req = new XMLHttpRequest();
+  var fsize = document.getElementById('file').files[0].size;
+  req.open('POST', '/update?size=' + fsize);
+  req.upload.addEventListener('progress', p=>{
+    let w = Math.round(p.loaded/p.total*100) + '%';
+      if(p.lengthComputable){
+         prg.innerHTML = w;
+         prg.style.width = w;
+      }
+      if(w == '100%') prg.style.backgroundColor = 'black';
+  });
+  req.send(data);
+ });
+</script>
+)literal";

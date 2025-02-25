@@ -1,6 +1,4 @@
 #include "main.h"
-// #include <WiFi.h>
-// #include <WiFiAP.h>
 // #include <AsyncUDP.h>
 
 Preferences preferences;
@@ -10,12 +8,16 @@ HardwareSerial SerialPort(SERIAL_PORT);
 uint8_t serial_buffer_rx[SERIAL_BUFFER_LENGTH];
 uint32_t serial_baudrate = DEFAULT_SERIAL_BAUDRATE;
 std::string domain_name = DEFAULT_DOMAIN_NAME;
-/*
 std::string password = DEFAULT_PASSWORD;
+
+uint8_t otaDone = 0;
+uint8_t mode = MODE_BLE;
+
+bool deviceConnected = false;
+
+/*
 std::string protocol = DEFAULT_PROTOCOL;
 uint16_t port = DEFAULT_PORT;
-
-uint8_t mode = 0;
 
 uint8_t pin_rx = 0xFF;
 uint8_t pin_tx = 0xFF;
@@ -26,6 +28,8 @@ uint8_t led_mode = 0x00;
 
 AsyncUDP udp;
 */
+
+WebServer server(80);
 
 NimBLEAdvertising *pAdvertising;
 NimBLEServer *pServer;
@@ -39,20 +43,19 @@ NimBLECharacteristic *pCharacteristicRX;
 
 NimBLECharacteristic *pCharacteristicBaudrate;
 NimBLECharacteristic *pCharacteristicDomain;
-
-bool deviceConnected = false;
+NimBLECharacteristic *pCharacteristicMode;
 
 class ServerCallbacks final : public BLEServerCallbacks {
     void onConnect(BLEServer *pServer) override {
         deviceConnected = true;
         NimBLEDevice::setPower(DEFAULT_BLE_HIGH_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
-        ESP_LOGI(TAG, "onConnect power up");
+        ESP_LOGI(TAG, "BLEServer onConnect power up");
     }
 
     void onDisconnect(BLEServer *pServer) override {
         deviceConnected = false;
         NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
-        ESP_LOGI(TAG, "onDisconnect power down");
+        ESP_LOGI(TAG, "BLEServer onDisconnect power down");
     }
 
     void onMTUChange(uint16_t MTU, ble_gap_conn_desc *desc) override {
@@ -78,6 +81,14 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
             pAdvertising->setName(domain_name);
             ESP_LOGI(TAG, "Domain name updated: %s", domain_name.c_str());
         }
+        else if (pCharacteristic->getUUID() == pCharacteristicMode->getUUID())
+        {
+            mode = *(uint8_t*)pCharacteristic->getValue().data();
+            preferences.putUInt(PREFERENCES_REC_MODE, (uint8_t)mode);
+            ESP_LOGI(TAG, "Mode updated: %d", mode);
+            delay(500);
+            esp_restart();
+        }
     }
 };
 
@@ -93,6 +104,98 @@ void onUdpPacket(AsyncUDPPacket packet) {
 }
 */
 
+void handleUpdateEnd()
+{
+    server.sendHeader("Connection", "close");
+    if (Update.hasError())
+    {
+        server.send(502, "text/plain", Update.errorString());
+    }
+    else
+    {
+        server.sendHeader("Refresh", "10");
+        server.sendHeader("Location", "/");
+        server.send(307);
+        ESP.restart();
+    }
+}
+
+void handleUpdate()
+{
+    size_t fsize = UPDATE_SIZE_UNKNOWN;
+    if (server.hasArg("size"))
+    {
+        fsize = server.arg("size").toInt();
+    }
+
+    HTTPUpload &upload = server.upload();
+    if (upload.status == UPLOAD_FILE_START)
+    {
+        ESP_LOGI(TAG, "Receiving Update: %s, Size: %d", upload.filename.c_str(), fsize);
+        if (!Update.begin(fsize))
+        {
+            otaDone = 0;
+            Update.printError(Serial);
+        }
+    }
+    else if (upload.status == UPLOAD_FILE_WRITE)
+    {
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize)
+        {
+            Update.printError(Serial);
+        }
+        else
+        {
+            otaDone = 100 * Update.progress() / Update.size();
+        }
+    }
+    else if (upload.status == UPLOAD_FILE_END)
+    {
+        if (Update.end(true))
+        {
+            ESP_LOGI(TAG, "Update Success: %u bytes\nRebooting...", upload.totalSize);
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Error: %s\n", Update.errorString());
+            otaDone = 0;
+        }
+    }
+}
+
+void handleSettings() {
+    server.sendHeader("Connection", "close");
+
+    if (server.hasArg(PREFERENCES_REC_SERIAL_BAUDRATE))
+    {
+        serial_baudrate = (uint32_t)server.arg(PREFERENCES_REC_SERIAL_BAUDRATE).toInt();
+        preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, serial_baudrate);
+        SerialPort.updateBaudRate(serial_baudrate);
+        ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serial_baudrate);
+        server.send(200);
+    }
+
+    if (server.hasArg(PREFERENCES_REC_DOMAIN_NAME))
+    {
+        domain_name = server.arg(PREFERENCES_REC_DOMAIN_NAME).c_str();
+        preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name.c_str(), domain_name.length());
+        ESP_LOGI(TAG, "Domain name updated: %s", domain_name.c_str());
+        server.send(200);
+        delay(500);
+        esp_restart();
+    }
+
+    if (server.hasArg(PREFERENCES_REC_MODE))
+    {
+        mode = (uint8_t)server.arg(PREFERENCES_REC_MODE).toInt();
+        preferences.putUInt(PREFERENCES_REC_MODE, mode);
+        ESP_LOGI(TAG, "Mode updated: %d", mode);
+        server.send(200);
+        delay(500);
+        esp_restart();
+    }
+}
+
 void initSerial()
 {
     SerialPort.begin(serial_baudrate, SERIAL_MODE, SERIAL_PIN_RX, SERIAL_PIN_TX);
@@ -103,9 +206,7 @@ void initBLE()
 {
     NimBLEDevice::init(domain_name);
     pServer = NimBLEDevice::createServer();
-#ifdef MAIN_DEBUG
     pServer->setCallbacks(new ServerCallbacks());
-#endif
 
     NimBLEService *pServiceInformation = pServer->createService("180A");
     pCharacteristicVendor = pServiceInformation->createCharacteristic("2A29", NIMBLE_PROPERTY::READ);
@@ -130,6 +231,10 @@ void initBLE()
     pCharacteristicDomain->setCallbacks(&chrCallbacks);
     pCharacteristicDomain->setValue(domain_name);
 
+    pCharacteristicMode = pServiceConfig->createCharacteristic("FFF3", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
+    pCharacteristicMode->setCallbacks(&chrCallbacks);
+    pCharacteristicMode->setValue(mode);
+
     pServiceExchange->start();
     pServiceConfig->start();
     pServiceInformation->start();
@@ -145,18 +250,25 @@ void initBLE()
     ESP_LOGI(TAG, "BLE initialized");
 }
 
-/*
-void initWiFi() {
-    WiFi.mode(WIFI_MODE_AP);
+void initWiFi()
+{
+    WiFi.mode(WIFI_AP);
     WiFi.softAP(domain_name.c_str(), password.c_str());
 
-    IPAddress myIP = WiFi.softAPIP();
-    Serial.println(myIP);
-
-    udp.onPacket(onUdpPacket);
-    udp.listenMulticast(myIP, port);
+    ESP_LOGI(TAG, "WiFi AP initialized name: %s, password: %s", domain_name.c_str(), password.c_str());
 }
-*/
+
+void initWebServer()
+{
+    server.on("/update", HTTP_POST, handleUpdateEnd, handleUpdate);
+    server.on("/settings", HTTP_GET, handleSettings);
+    server.onNotFound([]() {
+        server.send(200, "text/html", indexHtml);
+    });
+    server.begin();
+
+    ESP_LOGI(TAG, "Web Server initialized at http://%s", WiFi.softAPIP().toString().c_str());
+}
 
 void initPreferences()
 {
@@ -176,6 +288,11 @@ void initPreferences()
         char domain_name_buffer[32];
         unsigned int buffer_length = preferences.getBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name_buffer, 32);
         domain_name.assign(domain_name_buffer, buffer_length);
+    }
+
+    if (preferences.isKey(PREFERENCES_REC_MODE))
+    {
+        mode = (uint8_t)preferences.getUInt(PREFERENCES_REC_MODE);
     }
 
     ESP_LOGI(TAG, "Preferences initialized");
@@ -206,11 +323,6 @@ void initPreferences()
     if (preferences.isKey(PREFERENCES_REC_PORT))
     {
         port = (uint16_t)preferences.getUInt(PREFERENCES_REC_PORT);
-    }
-
-    if (preferences.isKey(PREFERENCES_REC_MODE))
-    {
-        mode = (uint8_t)preferences.getUInt(PREFERENCES_REC_MODE);
     }
 */
 }
@@ -248,20 +360,30 @@ void setup()
     delay(500);
     initSerial();
 
-    //if (mode > 0) {
-    //    digitalWrite(LED_PIN, 1);
-    //    initWiFi();
-    //} else {
+    if (mode == MODE_BLE)
+    {
         initBLE();
-    //}
+        digitalWrite(LED_PIN, HIGH);
+    }
+    else if (mode == MODE_WEB)
+    {
+        initWiFi();
+        initWebServer();
+        digitalWrite(LED_PIN, LOW);
+    }
 }
 
 void IRAM_ATTR loop()
 {
     if (digitalRead(BOOT_PIN) == 0)
     {
-        // preferences.putUInt(PREFERENCES_REC_MODE, 0);
+        preferences.putUInt(PREFERENCES_REC_MODE, MODE_BLE);
         esp_restart();
+    }
+
+    if (mode == MODE_WEB)
+    {
+        server.handleClient();
     }
 
     if (!deviceConnected)
