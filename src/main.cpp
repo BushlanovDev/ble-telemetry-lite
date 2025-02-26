@@ -163,7 +163,7 @@ void handleUpdate()
     }
 }
 
-void handleSettings() {
+void handleSetSettings() {
     server.sendHeader("Connection", "close");
 
     if (server.hasArg(PREFERENCES_REC_SERIAL_BAUDRATE))
@@ -261,8 +261,25 @@ void initWiFi()
 void initWebServer()
 {
     server.on("/update", HTTP_POST, handleUpdateEnd, handleUpdate);
-    server.on("/settings", HTTP_GET, handleSettings);
+    server.on("/settings", HTTP_POST, handleSetSettings);
+    server.on("/settings", HTTP_GET, []() {
+        String response = "{";
+
+        response += "\"vendor\": \"" + String(VENDOR) + "\", ";
+        response += "\"model\": \"" + String(MODEL) + "\", ";
+        response += "\"firmware\": \"" + String(FIRMWARE) + "\", ";
+
+        response += "\"" + String(PREFERENCES_REC_DOMAIN_NAME) + "\": \"" + domain_name.c_str() + "\", ";
+        response += "\"" + String(PREFERENCES_REC_SERIAL_BAUDRATE) + "\": \"" + String(serial_baudrate) + "\", ";
+        response += "\"" + String(PREFERENCES_REC_MODE) + "\": \"" + String(mode) + "\"";
+
+        response += "}";
+
+        server.sendHeader("Connection", "close");
+        server.send(200, "text/json", response);
+    });
     server.onNotFound([]() {
+        server.sendHeader("Connection", "close");
         server.send(200, "text/html", indexHtml);
     });
     server.begin();

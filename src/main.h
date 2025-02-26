@@ -63,34 +63,58 @@
 // HTML pages
 const char *indexHtml = R"literal(
 <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Firmware Configurator</title>
+    <style>
+        table {width: 100%; border-collapse: collapse;}
+        .setting {display: flex; margin-bottom: 5px;}
+        .setting input {flex: 1;}
+    </style>
+</head>
 <body style='width:480px'>
-  <h2>Firmware Update</h2>
-  <form method='POST' enctype='multipart/form-data' id='upload-form'>
+<h2>Settings</h2>
+<table border='1' id='settings-table'>
+    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+    <tbody></tbody>
+</table>
+<br>
+<div id='settings-inputs'></div>
+<br>
+<h2>Firmware Update</h2>
+<form id='upload-form'>
     <input type='file' id='file' name='update'>
     <input type='submit' value='Update'>
-  </form>
-  <br>
-  <div id='prg' style='width:0;color:white;text-align:center'>0%</div>
-</body>
+</form>
+<br>
+<div id='prg' style='width:0;color:white;text-align:center'>0%</div>
 <script>
-var prg = document.getElementById('prg');
-var form = document.getElementById('upload-form');
-form.addEventListener('submit', el=>{
-  prg.style.backgroundColor = 'blue';
-  el.preventDefault();
-  var data = new FormData(form);
-  var req = new XMLHttpRequest();
-  var fsize = document.getElementById('file').files[0].size;
-  req.open('POST', '/update?size=' + fsize);
-  req.upload.addEventListener('progress', p=>{
-    let w = Math.round(p.loaded/p.total*100) + '%';
-      if(p.lengthComputable){
-         prg.innerHTML = w;
-         prg.style.width = w;
-      }
-      if(w == '100%') prg.style.backgroundColor = 'black';
-  });
-  req.send(data);
- });
+document.addEventListener('DOMContentLoaded', async () => {
+    let res = await fetch('/settings');
+    let data = await res.json();
+    let tableBody = document.querySelector('#settings-table tbody');
+    ['vendor', 'model', 'firmware'].forEach(k => data[k] && (tableBody.innerHTML += `<tr><td>${k}</td><td>${data[k]}</td></tr>`));
+    let settingsDiv = document.getElementById('settings-inputs');
+    ['domain_name', 'serial_baudrate', 'mode'].forEach(k => {
+        if (data[k]) settingsDiv.innerHTML += `<div class='setting'><input id='${k}' value='${data[k]}'><button onclick='updateSetting("${k}")'>Save</button></div>`;
+    });
+});
+function updateSetting(k) {
+    fetch(`/settings?${k}=` + encodeURIComponent(document.getElementById(k).value), {method: 'POST'});
+}
+document.getElementById('upload-form').addEventListener('submit', e => {
+    e.preventDefault();
+    let prg = document.getElementById('prg');
+    prg.style.backgroundColor = '';
+    prg.style.width = '0%';
+    prg.textContent = '0%';
+    let req = new XMLHttpRequest();
+    req.open('POST', '/update?size=' + document.getElementById('file').files[0].size);
+    req.upload.onprogress = p => p.lengthComputable && (prg.textContent = prg.style.width = Math.round((p.loaded / p.total) * 100) + '%', p.loaded === p.total && (prg.style.backgroundColor = 'black'));
+    req.send(new FormData(e.target));
+});
 </script>
+</body>
+</html>
 )literal";
