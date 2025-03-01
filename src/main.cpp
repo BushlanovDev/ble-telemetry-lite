@@ -411,7 +411,20 @@ void IRAM_ATTR loop()
 
     if (SerialPort.available())
     {
-        size_t bytes = SerialPort.read(serial_buffer_rx, SERIAL_BUFFER_LENGTH);
+        const size_t bytes = SerialPort.read(serial_buffer_rx, SERIAL_BUFFER_LENGTH);
+        if (bytes < MIN_PAYLOAD_SIZE)
+        {
+            ESP_LOGI(TAG, "CRSF error packet size: %d", bytes);
+            return;
+        }
+
+        const uint8_t type = serial_buffer_rx[2];
+        if (type == PING_PACKET_ID || type == RC_SYNC_PACKET_ID)
+        {
+            ESP_LOGI(TAG, "CRSF ping or sync packet skipped");
+            return;
+        }
+
         //if (mode == 1) {
         //        udp.broadcastTo(serial_buffer_rx, bytes, port);
         //} else {

@@ -47,9 +47,10 @@
 #define MODEL "BLE Telemetry Lite"
 #define FIRMWARE "0.2.1"
 
-// Protocol
+// CRSF Protocol
 #define PING_PACKET_ID 0x28
-#define MIN_PAYLOAD_SIZE 4
+#define RC_SYNC_PACKET_ID 0x3A
+#define MIN_PAYLOAD_SIZE 5
 
 // Default values
 #define DEFAULT_SERIAL_BAUDRATE 115200
