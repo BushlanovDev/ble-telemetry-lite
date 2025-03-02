@@ -60,6 +60,7 @@
 #define DEFAULT_PORT 14550
 #define DEFAULT_BLE_LOW_PWR ESP_PWR_LVL_P3
 #define DEFAULT_BLE_HIGH_PWR ESP_PWR_LVL_P9
+#define TIMEOUT_MS 120000  // 120 seconds
 
 // HTML pages
 const char *indexHtml = R"literal(

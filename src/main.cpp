@@ -13,7 +13,10 @@ std::string password = DEFAULT_PASSWORD;
 uint8_t otaDone = 0;
 uint8_t mode = MODE_BLE;
 
-bool deviceConnected = false;
+bool bleDeviceConnected = false;
+bool deviceShouldShutdown = true;
+
+unsigned long startTime = 0;
 
 /*
 std::string protocol = DEFAULT_PROTOCOL;
@@ -47,13 +50,14 @@ NimBLECharacteristic *pCharacteristicMode;
 
 class ServerCallbacks final : public BLEServerCallbacks {
     void onConnect(BLEServer *pServer) override {
-        deviceConnected = true;
+        bleDeviceConnected = true;
+        deviceShouldShutdown = false;
         NimBLEDevice::setPower(DEFAULT_BLE_HIGH_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
-        ESP_LOGI(TAG, "BLEServer onConnect power up");
+        ESP_LOGI(TAG, "BLEServer onConnect power up and disable shutdown timer");
     }
 
     void onDisconnect(BLEServer *pServer) override {
-        deviceConnected = false;
+        bleDeviceConnected = false;
         NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
         ESP_LOGI(TAG, "BLEServer onDisconnect power down");
     }
@@ -388,10 +392,24 @@ void setup()
         initWebServer();
         digitalWrite(LED_PIN, LOW);
     }
+
+    startTime = millis();
 }
 
 void IRAM_ATTR loop()
 {
+    if (mode == MODE_WEB && deviceShouldShutdown && WiFi.softAPgetStationNum() > 0)
+    {
+        ESP_LOGI(TAG, "WiFi client connected, disabling shutdown timer");
+        deviceShouldShutdown = false;
+    }
+
+    if (deviceShouldShutdown && millis() - startTime >= TIMEOUT_MS)
+    {
+        ESP_LOGI(TAG, "Timeout reached, going to sleep, bye bye");
+        esp_deep_sleep_start();
+    }
+
     if (digitalRead(BOOT_PIN) == 0)
     {
         preferences.putUInt(PREFERENCES_REC_MODE, MODE_BLE);
@@ -403,7 +421,7 @@ void IRAM_ATTR loop()
         server.handleClient();
     }
 
-    if (!deviceConnected)
+    if (!bleDeviceConnected)
     {
         delay(20);
         return;
