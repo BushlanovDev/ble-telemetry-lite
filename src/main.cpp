@@ -48,27 +48,29 @@ NimBLECharacteristic *pCharacteristicBaudrate;
 NimBLECharacteristic *pCharacteristicDomain;
 NimBLECharacteristic *pCharacteristicMode;
 
-class ServerCallbacks final : public BLEServerCallbacks {
-    void onConnect(BLEServer *pServer) override {
+class ServerCallbacks final : public NimBLEServerCallbacks {
+    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
         bleDeviceConnected = true;
         deviceShouldShutdown = false;
-        NimBLEDevice::setPower(DEFAULT_BLE_HIGH_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
+        pServer->updateConnParams(connInfo.getConnHandle(), 6, 6, 0, 500);
+        NimBLEDevice::setPower(DEFAULT_BLE_HIGH_PWR);
         ESP_LOGI(TAG, "BLEServer onConnect power up and disable shutdown timer");
     }
 
-    void onDisconnect(BLEServer *pServer) override {
+    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
         bleDeviceConnected = false;
-        NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
+        NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR);
+        NimBLEDevice::startAdvertising();
         ESP_LOGI(TAG, "BLEServer onDisconnect power down");
     }
 
-    void onMTUChange(uint16_t MTU, ble_gap_conn_desc *desc) override {
-        ESP_LOGI(TAG, "MTU updated: %u for connection ID: %u", MTU, desc->conn_handle);
+    void onMTUChange(uint16_t MTU, NimBLEConnInfo& connInfo) override {
+        ESP_LOGI(TAG, "MTU updated: %u for connection ID: %u", MTU, connInfo.getConnHandle());
     }
 };
 
 class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
-    void IRAM_ATTR onWrite(NimBLECharacteristic* pCharacteristic) override {
+    void IRAM_ATTR onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
         if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID())
         {
             serial_baudrate = *(uint32_t*)pCharacteristic->getValue().data();
@@ -78,8 +80,8 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
         }
         else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID())
         {
-            domain_name.assign((char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
-            preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, (char*)pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
+            domain_name.assign((char*)pCharacteristic->getValue().data(), pCharacteristic->getLength());
+            preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, (char*)pCharacteristic->getValue().data(), pCharacteristic->getLength());
             NimBLEDevice::setDeviceName(domain_name);
             pAdvertising = NimBLEDevice::getAdvertising();
             pAdvertising->setName(domain_name);
@@ -244,12 +246,13 @@ void initBLE()
     pServiceInformation->start();
 
     pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID("FFF0");
-    pAdvertising->addServiceUUID("FFF1");
+    pAdvertising->addServiceUUID(pServiceExchange->getUUID());
+    pAdvertising->addServiceUUID(pServiceConfig->getUUID());
+    pAdvertising->setName(domain_name);
     pAdvertising->start();
 
     NimBLEDevice::setMTU(SERIAL_BUFFER_LENGTH + 3);
-    NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR, ESP_BLE_PWR_TYPE_DEFAULT);
+    NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR);
 
     ESP_LOGI(TAG, "BLE initialized");
 }
@@ -359,6 +362,7 @@ void setup()
     ESP_LOGI(TAG, "Chip Model: %s", ESP.getChipModel());
     ESP_LOGI(TAG, "Chip Revision: %d", ESP.getChipRevision());
     ESP_LOGI(TAG, "Chip Cores %d", ESP.getChipCores());
+    ESP_LOGI(TAG, "Chip Temp: %.2f C", temperatureRead());
     ESP_LOGI(TAG, "Flash Chip Size : %d", ESP.getFlashChipSize());
     ESP_LOGI(TAG, "Flash Chip Speed : %d", ESP.getFlashChipSpeed());
     esp_chip_info_t chip_info;
@@ -446,7 +450,11 @@ void IRAM_ATTR loop()
         //if (mode == 1) {
         //        udp.broadcastTo(serial_buffer_rx, bytes, port);
         //} else {
-            pCharacteristicTX->notify(serial_buffer_rx, bytes, true);
+            pCharacteristicTX->setValue((uint8_t*)&serial_buffer_rx, bytes);
+            if (!pCharacteristicTX->notify())
+            {
+                ESP_LOGI(TAG, "Failed to ble notify");
+            }
         //}
     }
 }
