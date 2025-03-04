@@ -1,3 +1,5 @@
+#pragma once
+
 #include <Arduino.h>
 #include <esp_attr.h>
 #include <esp_log.h>
@@ -26,41 +28,31 @@
 #define PREFERENCES_NAME "skydevices"
 #define PREFERENCES_REC_DOMAIN_NAME "domain_name"
 #define PREFERENCES_REC_SERIAL_BAUDRATE "serial_baudrate"
-#define PREFERENCES_REC_PASSWORD "password"
-#define PREFERENCES_REC_PROTOCOL "protocol"
-#define PREFERENCES_REC_PORT "port"
 #define PREFERENCES_REC_MODE "mode"
-#define PREFERENCES_REC_PIN_TX "pin_tx"
-#define PREFERENCES_REC_PIN_RX "pin_rx"
-#define PREFERENCES_REC_PIN_PPM "pin_ppm"
-#define PREFERENCES_REC_PIN_KEY "pin_boot"
-#define PREFERENCES_REC_PIN_LED "pin_led"
-#define PREFERENCES_REC_LED_MODE "led_mode"
 
 // Modes
 #define MODE_BLE 0
 #define MODE_WEB 1
 
 // Const values
-#define IP_ADDRESS 10,0,0,0
 #define VENDOR "SkyDevices.ru"
 #define MODEL "BLE Telemetry Lite"
-#define FIRMWARE "0.2.1"
+#define FIRMWARE "0.3.1"
 
 // CRSF Protocol
-#define PING_PACKET_ID 0x28
-#define RC_SYNC_PACKET_ID 0x3A
-#define MIN_PAYLOAD_SIZE 5
+#define CRSF_PING_PACKET_ID 0x28
+#define CRSF_RC_SYNC_PACKET_ID 0x3A
+#define CRSF_MIN_PAYLOAD_SIZE 5
 
 // Default values
 #define DEFAULT_SERIAL_BAUDRATE 115200
 #define DEFAULT_DOMAIN_NAME "BLE Telemetry Lite"
 #define DEFAULT_PASSWORD "12345678"
-#define DEFAULT_PROTOCOL "UDP"
-#define DEFAULT_PORT 14550
 #define DEFAULT_BLE_LOW_PWR ESP_PWR_LVL_P3
 #define DEFAULT_BLE_HIGH_PWR ESP_PWR_LVL_P9
-#define TIMEOUT_MS 120000  // 120 seconds
+#define DEFAULT_WEB_PORT 80
+#define DEFAULT_TIMEOUT_MS 120000  // 120 seconds
+#define DEFAULT_BLE_LINKSTATS_PACKET_PERIOD_MS 200
 
 // HTML pages
 const char *indexHtml = R"literal(

@@ -1,5 +1,4 @@
 #include "main.h"
-// #include <AsyncUDP.h>
 
 Preferences preferences;
 
@@ -17,22 +16,10 @@ bool bleDeviceConnected = false;
 bool deviceShouldShutdown = true;
 
 unsigned long startTime = 0;
+unsigned long nextTimeLinkStats = 0;
+unsigned long packetCount = 0;
 
-/*
-std::string protocol = DEFAULT_PROTOCOL;
-uint16_t port = DEFAULT_PORT;
-
-uint8_t pin_rx = 0xFF;
-uint8_t pin_tx = 0xFF;
-uint8_t pin_ppm = 0xFF;
-uint8_t pin_key = 0xFF;
-uint8_t pin_led = 0xFF;
-uint8_t led_mode = 0x00;
-
-AsyncUDP udp;
-*/
-
-WebServer server(80);
+WebServer server(DEFAULT_WEB_PORT);
 
 NimBLEAdvertising *pAdvertising;
 NimBLEServer *pServer;
@@ -99,16 +86,6 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
 };
 
 static CharacteristicCallbacks chrCallbacks;
-
-/*
-void onUdpPacket(AsyncUDPPacket packet) {
-    std::string str;
-    str.assign((char*)packet.data(), packet.length());
-    Serial.println(str.c_str());
-
-    udp.broadcastTo(packet.data(), packet.length(), port + 1);
-}
-*/
 
 void handleUpdateEnd()
 {
@@ -320,35 +297,6 @@ void initPreferences()
     }
 
     ESP_LOGI(TAG, "Preferences initialized");
-
-/*
-    if (!preferences.isKey(PREFERENCES_REC_PASSWORD))
-    {
-        preferences.putBytes(PREFERENCES_REC_PASSWORD, password.c_str(), password.length());
-    }
-    else
-    {
-        char password_buffer[32];
-        int buffer_length = preferences.getBytes(PREFERENCES_REC_PASSWORD, password_buffer, 32);
-        password.assign(password_buffer, buffer_length);
-    }
-
-    if (!preferences.isKey(PREFERENCES_REC_PROTOCOL))
-    {
-        preferences.putBytes(PREFERENCES_REC_PROTOCOL, protocol.c_str(), protocol.length());
-    }
-    else
-    {
-        char protocol_buffer[3];
-        int buffer_length = preferences.getBytes(PREFERENCES_REC_PROTOCOL, protocol_buffer, 3);
-        protocol.assign(protocol_buffer, buffer_length);
-    }
-
-    if (preferences.isKey(PREFERENCES_REC_PORT))
-    {
-        port = (uint16_t)preferences.getUInt(PREFERENCES_REC_PORT);
-    }
-*/
 }
 
 void setup()
@@ -408,7 +356,7 @@ void IRAM_ATTR loop()
         deviceShouldShutdown = false;
     }
 
-    if (deviceShouldShutdown && millis() - startTime >= TIMEOUT_MS)
+    if (deviceShouldShutdown && millis() - startTime >= DEFAULT_TIMEOUT_MS)
     {
         ESP_LOGI(TAG, "Timeout reached, going to sleep, bye bye");
         esp_deep_sleep_start();
@@ -433,28 +381,42 @@ void IRAM_ATTR loop()
 
     if (SerialPort.available())
     {
+        unsigned long now = millis();
         const size_t bytes = SerialPort.read(serial_buffer_rx, SERIAL_BUFFER_LENGTH);
-        if (bytes < MIN_PAYLOAD_SIZE)
+
+        if (nextTimeLinkStats <= now)
+        {
+            ESP_LOGI(TAG, "Packet count in last period: %d", packetCount);
+            nextTimeLinkStats = now + DEFAULT_BLE_LINKSTATS_PACKET_PERIOD_MS;
+            if (packetCount == 0)
+            {
+                const uint8_t packet[] = {0xea, 0x0c, 0x14, 0x78, 0x78, 0x00, 0xec, 0x00, 0x07, 0x02, 0x78, 0x00, 0xec, 0x90};
+                pCharacteristicTX->setValue((uint8_t*)&packet, sizeof(packet));
+                pCharacteristicTX->notify();
+                ESP_LOGI(TAG, "Sending empty link stats packet");
+            }
+            packetCount = 0;
+        }
+
+        if (bytes < CRSF_MIN_PAYLOAD_SIZE)
         {
             ESP_LOGI(TAG, "CRSF error packet size: %d", bytes);
             return;
         }
 
         const uint8_t type = serial_buffer_rx[2];
-        if (type == PING_PACKET_ID || type == RC_SYNC_PACKET_ID)
+        if (type == CRSF_PING_PACKET_ID || type == CRSF_RC_SYNC_PACKET_ID)
         {
             ESP_LOGI(TAG, "CRSF ping or sync packet skipped");
             return;
         }
 
-        //if (mode == 1) {
-        //        udp.broadcastTo(serial_buffer_rx, bytes, port);
-        //} else {
-            pCharacteristicTX->setValue((uint8_t*)&serial_buffer_rx, bytes);
-            if (!pCharacteristicTX->notify())
-            {
-                ESP_LOGI(TAG, "Failed to ble notify");
-            }
-        //}
+        packetCount++;
+
+        pCharacteristicTX->setValue((uint8_t*)&serial_buffer_rx, bytes);
+        if (!pCharacteristicTX->notify())
+        {
+            ESP_LOGI(TAG, "Failed to ble notify");
+        }
     }
 }
