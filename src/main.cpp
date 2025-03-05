@@ -348,6 +348,15 @@ void setup()
     startTime = millis();
 }
 
+void sendBleData(const uint8_t* data, size_t size)
+{
+    pCharacteristicTX->setValue(data, size);
+    if (!pCharacteristicTX->notify())
+    {
+        ESP_LOGI(TAG, "Failed to ble notify");
+    }
+}
+
 void IRAM_ATTR loop()
 {
     if (mode == MODE_WEB && deviceShouldShutdown && WiFi.softAPgetStationNum() > 0)
@@ -390,9 +399,7 @@ void IRAM_ATTR loop()
             nextTimeLinkStats = now + DEFAULT_BLE_LINKSTATS_PACKET_PERIOD_MS;
             if (packetCount == 0)
             {
-                const uint8_t packet[] = {0xea, 0x0c, 0x14, 0x78, 0x78, 0x00, 0xec, 0x00, 0x07, 0x02, 0x78, 0x00, 0xec, 0x90};
-                pCharacteristicTX->setValue((uint8_t*)&packet, sizeof(packet));
-                pCharacteristicTX->notify();
+                sendBleData(EMPTY_LINK_STATS_PACKET, EMPTY_LINK_STATS_PACKET_SIZE);
                 ESP_LOGI(TAG, "Sending empty link stats packet");
             }
             packetCount = 0;
@@ -413,10 +420,6 @@ void IRAM_ATTR loop()
 
         packetCount++;
 
-        pCharacteristicTX->setValue((uint8_t*)&serial_buffer_rx, bytes);
-        if (!pCharacteristicTX->notify())
-        {
-            ESP_LOGI(TAG, "Failed to ble notify");
-        }
+        sendBleData((uint8_t*)&serial_buffer_rx, bytes);
     }
 }
