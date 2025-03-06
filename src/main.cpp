@@ -57,7 +57,7 @@ class ServerCallbacks final : public NimBLEServerCallbacks {
 };
 
 class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
-    void IRAM_ATTR onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
+    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
         if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID())
         {
             serial_baudrate = *(uint32_t*)pCharacteristic->getValue().data();
@@ -311,8 +311,9 @@ void setup()
     ESP_LOGI(TAG, "Chip Revision: %d", ESP.getChipRevision());
     ESP_LOGI(TAG, "Chip Cores %d", ESP.getChipCores());
     ESP_LOGI(TAG, "Chip Temp: %.2f C", temperatureRead());
-    ESP_LOGI(TAG, "Flash Chip Size : %d", ESP.getFlashChipSize());
-    ESP_LOGI(TAG, "Flash Chip Speed : %d", ESP.getFlashChipSpeed());
+    ESP_LOGI(TAG, "Flash Chip Size: %d", ESP.getFlashChipSize());
+    ESP_LOGI(TAG, "Flash Chip Speed: %d", ESP.getFlashChipSpeed());
+    ESP_LOGI(TAG, "PSRAM Size: %d", ESP.getPsramSize());
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
     ESP_LOGI(TAG, "Features included: %s %s %s %s %s",
@@ -321,7 +322,6 @@ void setup()
         (chip_info.features & CHIP_FEATURE_BLE) ? "Bluetooth LE," : "",
         (chip_info.features & CHIP_FEATURE_BT) ? "Bluetooth Classic," : "",
         (chip_info.features & CHIP_FEATURE_IEEE802154) ? "IEEE 802.15.4," : "");
-
     ESP_LOGI(TAG, "====================================");
 #else
     esp_log_level_set("*", ESP_LOG_NONE);
