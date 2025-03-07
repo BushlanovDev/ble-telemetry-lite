@@ -328,7 +328,9 @@ void setup()
 #endif
 
     pinMode(LED_PIN, OUTPUT);
+#ifdef BOARD_ESP32C3
     pinMode(BOOT_PIN, INPUT);
+#endif
     initPreferences();
     delay(500);
     initSerial();
@@ -371,11 +373,13 @@ void IRAM_ATTR loop()
         esp_deep_sleep_start();
     }
 
+#ifdef BOARD_ESP32C3
     if (digitalRead(BOOT_PIN) == 0)
     {
         preferences.putUInt(PREFERENCES_REC_MODE, MODE_BLE);
         esp_restart();
     }
+#endif
 
     if (mode == MODE_WEB)
     {
