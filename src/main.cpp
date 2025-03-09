@@ -19,7 +19,7 @@ unsigned long startTime = 0;
 unsigned long nextTimeLinkStats = 0;
 unsigned long packetCount = 0;
 
-WebServer server(DEFAULT_WEB_PORT);
+AsyncWebServer webServer(DEFAULT_WEB_PORT);
 
 NimBLEAdvertising *pAdvertising;
 NimBLEServer *pServer;
@@ -87,93 +87,86 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
 
 static CharacteristicCallbacks chrCallbacks;
 
-void handleUpdateEnd()
+void handleUpdateEnd(AsyncWebServerRequest *request)
 {
-    server.sendHeader("Connection", "close");
     if (Update.hasError())
     {
-        server.send(502, "text/plain", Update.errorString());
+        request->send(502, "text/plain", Update.errorString());
     }
     else
     {
-        server.sendHeader("Refresh", "10");
-        server.sendHeader("Location", "/");
-        server.send(307);
+        AsyncWebServerResponse *response = request->beginResponse(307);
+        response->addHeader("Refresh","10");
+        response->addHeader("Location","/");
+        request->send(response);
         ESP.restart();
     }
 }
 
-void handleUpdate()
+void handleUpdate(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final)
 {
     size_t fsize = UPDATE_SIZE_UNKNOWN;
-    if (server.hasArg("size"))
+    if (request->hasArg("size"))
     {
-        fsize = server.arg("size").toInt();
+        fsize = request->arg("size").toInt();
     }
 
-    HTTPUpload &upload = server.upload();
-    if (upload.status == UPLOAD_FILE_START)
+    if (!index)
     {
-        ESP_LOGI(TAG, "Receiving Update: %s, Size: %d", upload.filename.c_str(), fsize);
+        ESP_LOGI(TAG, "Receiving Update: %s, Size: %d", filename, fsize);
         if (!Update.begin(fsize))
         {
-            otaDone = 0;
+            ESP_LOGI(TAG, "Error: %s\n", Update.errorString());
             Update.printError(Serial);
         }
     }
-    else if (upload.status == UPLOAD_FILE_WRITE)
+
+    if (Update.write(data, len) != len)
     {
-        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize)
-        {
-            Update.printError(Serial);
-        }
-        else
-        {
-            otaDone = 100 * Update.progress() / Update.size();
-        }
+        ESP_LOGI(TAG, "Error: %s\n", Update.errorString());
+        Update.printError(Serial);
     }
-    else if (upload.status == UPLOAD_FILE_END)
+
+    if (final)
     {
-        if (Update.end(true))
-        {
-            ESP_LOGI(TAG, "Update Success: %u bytes\nRebooting...", upload.totalSize);
-        }
-        else
+        if (!Update.end(true))
         {
             ESP_LOGI(TAG, "Error: %s\n", Update.errorString());
-            otaDone = 0;
+            Update.printError(Serial);
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Update Success: %u bytes\nRebooting...", fsize);
         }
     }
 }
 
-void handleSetSettings() {
-    server.sendHeader("Connection", "close");
-
-    if (server.hasArg(PREFERENCES_REC_SERIAL_BAUDRATE))
+void handleSetSettings(AsyncWebServerRequest *request) {
+    if (request->hasArg(PREFERENCES_REC_SERIAL_BAUDRATE))
     {
-        serial_baudrate = (uint32_t)server.arg(PREFERENCES_REC_SERIAL_BAUDRATE).toInt();
+        serial_baudrate = (uint32_t)request->arg(PREFERENCES_REC_SERIAL_BAUDRATE).toInt();
         preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, serial_baudrate);
         SerialPort.updateBaudRate(serial_baudrate);
         ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serial_baudrate);
-        server.send(200);
+        request->send(200);
     }
 
-    if (server.hasArg(PREFERENCES_REC_DOMAIN_NAME))
+    if (request->hasArg(PREFERENCES_REC_DOMAIN_NAME))
     {
-        domain_name = server.arg(PREFERENCES_REC_DOMAIN_NAME).c_str();
+        domain_name = request->arg(PREFERENCES_REC_DOMAIN_NAME).c_str();
         preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name.c_str(), domain_name.length());
         ESP_LOGI(TAG, "Domain name updated: %s", domain_name.c_str());
-        server.send(200);
+        request->send(200);
         delay(500);
         esp_restart();
     }
 
-    if (server.hasArg(PREFERENCES_REC_MODE))
+    if (request->hasArg(PREFERENCES_REC_MODE))
     {
-        mode = (uint8_t)server.arg(PREFERENCES_REC_MODE).toInt();
+        mode = (uint8_t)request->arg(PREFERENCES_REC_MODE).toInt();
         preferences.putUInt(PREFERENCES_REC_MODE, mode);
         ESP_LOGI(TAG, "Mode updated: %d", mode);
-        server.send(200);
+        request->send(200);
         delay(500);
         esp_restart();
     }
@@ -181,7 +174,7 @@ void handleSetSettings() {
 
 void initSerial()
 {
-    SerialPort.begin(serial_baudrate, SERIAL_MODE, SERIAL_PIN_RX, SERIAL_PIN_TX);
+    SerialPort.begin(serial_baudrate, SERIAL_8N1, SERIAL_PIN_RX, SERIAL_PIN_TX);
     ESP_LOGI(TAG, "Serial initialized");
 }
 
@@ -244,9 +237,11 @@ void initWiFi()
 
 void initWebServer()
 {
-    server.on("/update", HTTP_POST, handleUpdateEnd, handleUpdate);
-    server.on("/settings", HTTP_POST, handleSetSettings);
-    server.on("/settings", HTTP_GET, []() {
+    webServer.on("/update", HTTP_POST, handleUpdateEnd, handleUpdate);
+
+    webServer.on("/settings", HTTP_POST, handleSetSettings);
+
+    webServer.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request) {
         String response = "{";
 
         response += "\"vendor\": \"" + String(VENDOR) + "\", ";
@@ -259,14 +254,14 @@ void initWebServer()
 
         response += "}";
 
-        server.sendHeader("Connection", "close");
-        server.send(200, "text/json", response);
+        request->send(200, "text/json", response);
     });
-    server.onNotFound([]() {
-        server.sendHeader("Connection", "close");
-        server.send(200, "text/html", indexHtml);
+
+    webServer.on("/", [](AsyncWebServerRequest *request) {
+        request->send(200, "text/html", indexHtml);
     });
-    server.begin();
+
+    webServer.begin();
 
     ESP_LOGI(TAG, "Web Server initialized at http://%s", WiFi.softAPIP().toString().c_str());
 }
@@ -380,11 +375,6 @@ void IRAM_ATTR loop()
         esp_restart();
     }
 #endif
-
-    if (mode == MODE_WEB)
-    {
-        server.handleClient();
-    }
 
     if (!bleDeviceConnected)
     {

@@ -9,7 +9,8 @@
 #include <string>
 #include <Update.h>
 #include <WiFi.h>
-#include <WebServer.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 
 // Logging
 // #define MAIN_DEBUG
@@ -17,7 +18,6 @@
 
 // Hardware
 #define SERIAL_PORT 1
-#define SERIAL_MODE SERIAL_8N1
 #define SERIAL_BUFFER_LENGTH 64
 #define LED_PIN 8
 
