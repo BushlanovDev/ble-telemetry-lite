@@ -4,7 +4,9 @@ Preferences preferences;
 
 HardwareSerial SerialPort(SERIAL_PORT);
 
-uint8_t serial_buffer_rx[SERIAL_BUFFER_LENGTH];
+uint8_t crsfBuffer[CRSF_MAX_PACKET_SIZE];
+size_t crsfIndex = 0;
+
 uint32_t serial_baudrate = DEFAULT_SERIAL_BAUDRATE;
 std::string domain_name = DEFAULT_DOMAIN_NAME;
 std::string password = DEFAULT_PASSWORD;
@@ -20,6 +22,8 @@ unsigned long nextTimeLinkStats = 0;
 unsigned long packetCount = 0;
 
 AsyncWebServer webServer(DEFAULT_WEB_PORT);
+AsyncWebSocket ws("/ws");
+AsyncWebSocketClient* wsClient;
 
 NimBLEAdvertising *pAdvertising;
 NimBLEServer *pServer;
@@ -141,7 +145,8 @@ void handleUpdate(AsyncWebServerRequest *request, const String& filename, size_t
     }
 }
 
-void handleSetSettings(AsyncWebServerRequest *request) {
+void handleSetSettings(AsyncWebServerRequest *request)
+{
     if (request->hasArg(PREFERENCES_REC_SERIAL_BAUDRATE))
     {
         serial_baudrate = (uint32_t)request->arg(PREFERENCES_REC_SERIAL_BAUDRATE).toInt();
@@ -169,6 +174,20 @@ void handleSetSettings(AsyncWebServerRequest *request) {
         request->send(200);
         delay(500);
         esp_restart();
+    }
+}
+
+void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
+{
+    if (type == WS_EVT_CONNECT)
+    {
+        ESP_LOGI(TAG, "WebSocket client connected from %s", client->remoteIP().toString().c_str());
+        wsClient = client;
+    }
+    else if (type == WS_EVT_DISCONNECT)
+    {
+        ESP_LOGI(TAG, "WebSocket client disconnected from %s", client->remoteIP().toString().c_str());
+        wsClient = nullptr;
     }
 }
 
@@ -221,7 +240,7 @@ void initBLE()
     pAdvertising->setName(domain_name);
     pAdvertising->start();
 
-    NimBLEDevice::setMTU(SERIAL_BUFFER_LENGTH + 3);
+    NimBLEDevice::setMTU(CRSF_MAX_PACKET_SIZE + 3);
     NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR);
 
     ESP_LOGI(TAG, "BLE initialized");
@@ -261,6 +280,19 @@ void initWebServer()
         request->send(200, "text/html", indexHtml);
     });
 
+    webServer.addMiddleware([](AsyncWebServerRequest *request, ArMiddlewareNext next) {
+        if (ws.count() > 1)
+        {
+            request->send(503, "text/plain", "Server is busy");
+        }
+        else
+        {
+            next();
+        }
+    });
+
+    ws.onEvent(onWsEvent);
+    webServer.addHandler(&ws);
     webServer.begin();
 
     ESP_LOGI(TAG, "Web Server initialized at http://%s", WiFi.softAPIP().toString().c_str());
@@ -292,6 +324,35 @@ void initPreferences()
     }
 
     ESP_LOGI(TAG, "Preferences initialized");
+}
+
+void sendBleData(const uint8_t* data, size_t size)
+{
+    pCharacteristicTX->setValue(data, size);
+    if (!pCharacteristicTX->notify())
+    {
+        ESP_LOGI(TAG, "Failed to ble notify");
+    }
+}
+
+void sendWSData(const uint8_t* data, size_t size)
+{
+    if (wsClient->canSend())
+    {
+        wsClient->binary(data, size);
+    }
+}
+
+void sendData(const uint8_t *data, size_t size)
+{
+    if (bleDeviceConnected)
+    {
+        sendBleData(data, size);
+    }
+    else if (wsClient != nullptr)
+    {
+        sendWSData(data, size);
+    }
 }
 
 void setup()
@@ -345,15 +406,6 @@ void setup()
     startTime = millis();
 }
 
-void sendBleData(const uint8_t* data, size_t size)
-{
-    pCharacteristicTX->setValue(data, size);
-    if (!pCharacteristicTX->notify())
-    {
-        ESP_LOGI(TAG, "Failed to ble notify");
-    }
-}
-
 void IRAM_ATTR loop()
 {
     if (mode == MODE_WEB && deviceShouldShutdown && WiFi.softAPgetStationNum() > 0)
@@ -376,44 +428,65 @@ void IRAM_ATTR loop()
     }
 #endif
 
-    if (!bleDeviceConnected)
+    if (!bleDeviceConnected && wsClient == nullptr)
     {
         delay(20);
         return;
     }
 
-    if (SerialPort.available())
+    unsigned long now = millis();
+    if (nextTimeLinkStats <= now)
     {
-        unsigned long now = millis();
-        const size_t bytes = SerialPort.read(serial_buffer_rx, SERIAL_BUFFER_LENGTH);
-
-        if (nextTimeLinkStats <= now)
+        ESP_LOGI(TAG, "Packet count in last period: %d", packetCount);
+        nextTimeLinkStats = now + DEFAULT_BLE_LINKSTATS_PACKET_PERIOD_MS;
+        if (packetCount == 0)
         {
-            ESP_LOGI(TAG, "Packet count in last period: %d", packetCount);
-            nextTimeLinkStats = now + DEFAULT_BLE_LINKSTATS_PACKET_PERIOD_MS;
-            if (packetCount == 0)
+            sendData(EMPTY_LINK_STATS_PACKET, EMPTY_LINK_STATS_PACKET_SIZE);
+            ESP_LOGI(TAG, "Sending empty link stats packet");
+        }
+        packetCount = 0;
+    }
+
+    while (SerialPort.available())
+    {
+        uint8_t byte = SerialPort.read();
+        if (crsfIndex == 0 && byte != CRSF_ADDRESS_RADIO_TRANSMITTER)
+        {
+            return;
+        }
+
+        crsfBuffer[crsfIndex++] = byte;
+        if (crsfIndex == 2)
+        {
+            uint8_t expectedLength = crsfBuffer[1];
+            if (expectedLength > CRSF_MAX_PAYLOAD_SIZE)
             {
-                sendBleData(EMPTY_LINK_STATS_PACKET, EMPTY_LINK_STATS_PACKET_SIZE);
-                ESP_LOGI(TAG, "Sending empty link stats packet");
+                ESP_LOGI(TAG, "CRSF incorrect packet size skipped length:(%d)", expectedLength);
+                crsfIndex = 0;
+                return;
             }
-            packetCount = 0;
         }
-
-        if (bytes < CRSF_MIN_PAYLOAD_SIZE)
+        else if (crsfIndex > 2)
         {
-            ESP_LOGI(TAG, "CRSF error packet size: %d", bytes);
-            return;
+            uint8_t expectedLength = crsfBuffer[1] + 2;
+            if (crsfIndex == expectedLength)
+            {
+                const uint8_t type = crsfBuffer[2];
+                if (type == CRSF_PING_PACKET_ID || type == CRSF_RC_SYNC_PACKET_ID || expectedLength < CRSF_MIN_PACKET_SIZE)
+                {
+                    ESP_LOGI(TAG, "CRSF ping or sync packet skipped type:(0x%02x) length:(%d)", type, expectedLength);
+                }
+                else
+                {
+                    packetCount++;
+                    sendData(crsfBuffer, expectedLength);
+                }
+
+                memset(crsfBuffer, 0, expectedLength);
+                crsfIndex = 0;
+
+                return;
+            }
         }
-
-        const uint8_t type = serial_buffer_rx[2];
-        if (type == CRSF_PING_PACKET_ID || type == CRSF_RC_SYNC_PACKET_ID)
-        {
-            ESP_LOGI(TAG, "CRSF ping or sync packet skipped");
-            return;
-        }
-
-        packetCount++;
-
-        sendBleData((uint8_t*)&serial_buffer_rx, bytes);
     }
 }
