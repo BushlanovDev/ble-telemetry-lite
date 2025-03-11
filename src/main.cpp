@@ -280,17 +280,6 @@ void initWebServer()
         request->send(200, "text/html", indexHtml);
     });
 
-    webServer.addMiddleware([](AsyncWebServerRequest *request, ArMiddlewareNext next) {
-        if (ws.count() > 1)
-        {
-            request->send(503, "text/plain", "Server is busy");
-        }
-        else
-        {
-            next();
-        }
-    });
-
     ws.onEvent(onWsEvent);
     webServer.addHandler(&ws);
     webServer.begin();

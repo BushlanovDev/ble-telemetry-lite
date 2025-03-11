@@ -44,7 +44,7 @@
 // Const values
 #define VENDOR "SkyDevices.ru"
 #define MODEL "BLE Telemetry Lite"
-#define FIRMWARE "0.3.1"
+#define FIRMWARE "0.4.0"
 
 // CRSF Protocol
 #define CRSF_ADDRESS_RADIO_TRANSMITTER 0xEA
@@ -71,35 +71,73 @@ const char *indexHtml = R"literal(
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Firmware Configurator</title>
-    <style>
-        table {width: 100%; border-collapse: collapse;}
-        .setting {display: flex; margin-bottom: 5px;}
-        .setting input {flex: 1;}
-    </style>
+<meta charset="UTF-8">
+<title>BLE Telemetry Lite</title>
+<style>
+* {margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif;}
+body {width: 100%; max-width: 480px; margin: auto; background: #121212; color: white; padding: 20px;}
+h2 {color: #00ff99; text-align: center; margin: 20px 0;}
+table {width: 100%; border-collapse: collapse; background: #1e1e1e;}
+th, td {border: 1px solid #333; padding: 10px; text-align: left;}
+.setting {display: flex; gap: 5px; margin-bottom: 5px;}
+input, button {padding: 8px; border: none; outline: none;}
+input {flex: 1; background: #222; color: white;}
+button {background: #00ff99; color: black; cursor: pointer;}
+button:hover {opacity: 0.8;}
+form {text-align: center; margin-top: 10px;}
+#prg {width: 0; height: 20px; background: #00ff99; text-align: center; display: none;}
+.tabs {display: flex; justify-content: space-around; margin-bottom: 10px;}
+.tab {padding: 10px; cursor: pointer; background: #222; color: white; border-radius: 5px;}
+.tab.active {background: #00ff99; color: black;}
+.tab-content {display: none;}
+.tab-content.active {display: block;}
+textarea {width: 100%; height: 200px; background: #222; color: white; margin-top: 10px;}
+</style>
 </head>
-<body style='width:480px'>
+<body>
+<div class="tabs">
+<div class="tab active" onclick="showTab('settings')">Settings</div>
+<div class="tab" onclick="showTab('update')">Update</div>
+<div class="tab" onclick="showTab('telemetry')">Telemetry</div>
+</div>
+<div id="settings" class="tab-content active">
 <h2>Settings</h2>
-<table border='1' id='settings-table'>
-    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
-    <tbody></tbody>
+<table>
+<thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+<tbody id='settings-table'></tbody>
 </table>
 <br>
 <div id='settings-inputs'></div>
-<br>
+</div>
+<div id="update" class="tab-content">
 <h2>Firmware Update</h2>
 <form id='upload-form'>
-    <input type='file' id='file' name='update'>
-    <input type='submit' value='Update'>
+<input type='file' id='file'>
+<button type='submit' id='update-btn'>Update</button>
 </form>
+<div id='prg'></div>
+</div>
+<div id="telemetry" class="tab-content">
+<h2>Telemetry</h2>
+<table>
+<thead><tr><th>Sensor</th><th>Value</th></tr></thead>
+<tbody id="telemetry-table"></tbody>
+</table>
 <br>
-<div id='prg' style='width:0;color:white;text-align:center'>0%</div>
+<button onclick="startWebSocket()">Connect</button>
+<textarea id="log" readonly></textarea>
+</div>
 <script>
+function showTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
+}
 document.addEventListener('DOMContentLoaded', async () => {
     let res = await fetch('/settings');
     let data = await res.json();
-    let tableBody = document.querySelector('#settings-table tbody');
+    let tableBody = document.querySelector('#settings-table');
     ['vendor', 'model', 'firmware'].forEach(k => data[k] && (tableBody.innerHTML += `<tr><td>${k}</td><td>${data[k]}</td></tr>`));
     let settingsDiv = document.getElementById('settings-inputs');
     ['domain_name', 'serial_baudrate', 'mode'].forEach(k => {
@@ -112,14 +150,38 @@ function updateSetting(k) {
 document.getElementById('upload-form').addEventListener('submit', e => {
     e.preventDefault();
     let prg = document.getElementById('prg');
-    prg.style.backgroundColor = '';
+    let updateBtn = document.getElementById('update-btn');
+    updateBtn.disabled = true;
     prg.style.width = '0%';
     prg.textContent = '0%';
+    prg.style.display = 'block';
     let req = new XMLHttpRequest();
     req.open('POST', '/update?size=' + document.getElementById('file').files[0].size);
-    req.upload.onprogress = p => p.lengthComputable && (prg.textContent = prg.style.width = Math.round((p.loaded / p.total) * 100) + '%', p.loaded === p.total && (prg.style.backgroundColor = 'black'));
+    req.upload.onprogress = p => {
+        if (p.lengthComputable) {
+            let percent = Math.round((p.loaded / p.total) * 100) + '%';
+            prg.textContent = percent;
+            prg.style.width = percent;
+        }
+    };
+    req.onload = req.onerror = () => updateBtn.disabled = false;
     req.send(new FormData(e.target));
 });
+function startWebSocket() {
+    let socket = new WebSocket("ws://192.168.4.1/ws");
+    let log = document.getElementById('log');
+    let telemetryTable = document.getElementById('telemetry-table');
+    socket.binaryType = "arraybuffer";
+    socket.onmessage = function (e) {
+        if (e.data instanceof ArrayBuffer) {
+            let bytes = new Uint8Array(e.data);
+            let hexString = Array.from(bytes, byte => '0x' + byte.toString(16).padStart(2, '0')).join(' ');
+            log.value += hexString + "\n";
+        } else {
+            log.value += e.data.toString() + "\n";
+        }
+    };
+}
 </script>
 </body>
 </html>
