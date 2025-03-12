@@ -170,17 +170,57 @@ document.getElementById('upload-form').addEventListener('submit', e => {
 function startWebSocket() {
     let socket = new WebSocket("ws://192.168.4.1/ws");
     let log = document.getElementById('log');
-    let telemetryTable = document.getElementById('telemetry-table');
     socket.binaryType = "arraybuffer";
     socket.onmessage = function (e) {
         if (e.data instanceof ArrayBuffer) {
             let bytes = new Uint8Array(e.data);
+            processCRSFData(bytes);
             let hexString = Array.from(bytes, byte => '0x' + byte.toString(16).padStart(2, '0')).join(' ');
             log.value += hexString + "\n";
         } else {
             log.value += e.data.toString() + "\n";
         }
     };
+}
+function processCRSFData(bytes) {
+    let packetType = bytes[2];
+    let payload = bytes.slice(3, -1);
+    switch (packetType) {
+        case 0x08:
+            let voltage = (payload[0] << 8 | payload[1]) / 10;
+            let current = (payload[2] << 8 | payload[3]) / 10;
+            addRow("Voltage", voltage + "V");
+            addRow("Current", current + "A");
+            break;
+        case 0x02:
+            let latitude = ((payload[0] << 24) | (payload[1] << 16) | (payload[2] << 8) | payload[3]) / 1e7;
+            let longitude = ((payload[4] << 24) | (payload[5] << 16) | (payload[6] << 8) | payload[7]) / 1e7;
+            let speed = ((payload[8] << 8) | payload[9]) / 10;
+            let altitude = ((payload[12] << 8) | payload[13]) - 1000;
+            addRow("Latitude", latitude.toFixed(6));
+            addRow("Longitude", longitude.toFixed(6));
+            addRow("Speed", speed + " km/h");
+            addRow("Altitude", altitude + " m");
+            break;
+        case 0x14:
+            addRow("Uplink RSSI Ant. 1", "-" + payload[0] + " dBm");
+            addRow("Uplink RSSI Ant. 2", "-" + payload[1] + " dBm");
+            addRow("Uplink LQ", payload[2] + "%");
+            addRow("TX Power", payload[6] + " mW");
+            addRow("Downlink RSSI", "-" + payload[7] + " dBm");
+            break;
+    }
+}
+function addRow(sensorName, value) {
+    let existingRow = document.querySelector(`#telemetry-table tr[data-sensor="${sensorName}"]`);
+    if (existingRow) {
+        existingRow.children[1].textContent = value;
+    } else {
+        let row = document.createElement("tr");
+        row.setAttribute("data-sensor", sensorName);
+        row.innerHTML = `<td>${sensorName}</td><td>${value}</td>`;
+        document.getElementById('telemetry-table').appendChild(row);
+    }
 }
 </script>
 </body>

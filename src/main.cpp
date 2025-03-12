@@ -328,7 +328,7 @@ void sendWSData(const uint8_t* data, size_t size)
 {
     if (wsClient->canSend())
     {
-        wsClient->binary(data, size);
+        ws.binaryAll(data, size);
     }
 }
 
