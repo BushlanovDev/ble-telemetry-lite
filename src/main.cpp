@@ -6,6 +6,7 @@ HardwareSerial SerialPort(SERIAL_PORT);
 
 uint8_t crsfBuffer[CRSF_MAX_PACKET_SIZE];
 size_t crsfIndex = 0;
+GENERIC_CRC8 crsfCrc(CRSF_CRC_POLY);
 
 uint32_t serial_baudrate = DEFAULT_SERIAL_BAUDRATE;
 std::string domain_name = DEFAULT_DOMAIN_NAME;
@@ -438,7 +439,7 @@ void IRAM_ATTR loop()
 
     while (SerialPort.available())
     {
-        uint8_t byte = SerialPort.read();
+        const uint8_t byte = SerialPort.read();
         if (crsfIndex == 0 && byte != CRSF_ADDRESS_RADIO_TRANSMITTER)
         {
             return;
@@ -447,8 +448,8 @@ void IRAM_ATTR loop()
         crsfBuffer[crsfIndex++] = byte;
         if (crsfIndex == 2)
         {
-            uint8_t expectedLength = crsfBuffer[1];
-            if (expectedLength > CRSF_MAX_PAYLOAD_SIZE)
+            const uint8_t expectedLength = crsfBuffer[1];
+            if (expectedLength > CRSF_MAX_PAYLOAD_SIZE || expectedLength < CRSF_MIN_PAYLOAD_SIZE)
             {
                 ESP_LOGI(TAG, "CRSF incorrect packet size skipped length:(%d)", expectedLength);
                 crsfIndex = 0;
@@ -457,11 +458,21 @@ void IRAM_ATTR loop()
         }
         else if (crsfIndex > 2)
         {
-            uint8_t expectedLength = crsfBuffer[1] + 2;
+            const uint8_t expectedLength = crsfBuffer[1] + 2;
             if (crsfIndex == expectedLength)
             {
+                const uint8_t inCrc = crsfBuffer[expectedLength - 1];
+                const uint8_t crc = crsfCrc.calc(&crsfBuffer[2], expectedLength - 3);
+                if (inCrc != crc)
+                {
+                    memset(crsfBuffer, 0, expectedLength);
+                    crsfIndex = 0;
+                    ESP_LOGI(TAG, "CRSF incorrect packet crc 0x%02x != 0x%02x", inCrc, crc);
+                    return;
+                }
+
                 const uint8_t type = crsfBuffer[2];
-                if (type == CRSF_PING_PACKET_ID || type == CRSF_RC_SYNC_PACKET_ID || expectedLength < CRSF_MIN_PACKET_SIZE)
+                if (type == CRSF_PING_PACKET_ID || type == CRSF_RC_SYNC_PACKET_ID)
                 {
                     ESP_LOGI(TAG, "CRSF ping or sync packet skipped type:(0x%02x) length:(%d)", type, expectedLength);
                 }

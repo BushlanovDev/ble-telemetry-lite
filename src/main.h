@@ -11,6 +11,7 @@
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include "crc.h"
 
 // Logging
 // #define MAIN_DEBUG
@@ -50,9 +51,10 @@
 #define CRSF_ADDRESS_RADIO_TRANSMITTER 0xEA
 #define CRSF_PING_PACKET_ID 0x28
 #define CRSF_RC_SYNC_PACKET_ID 0x3A
-#define CRSF_MIN_PACKET_SIZE 5
 #define CRSF_MAX_PACKET_SIZE 64
-#define CRSF_MAX_PAYLOAD_SIZE 60
+#define CRSF_MIN_PAYLOAD_SIZE 3
+#define CRSF_MAX_PAYLOAD_SIZE 62
+#define CRSF_CRC_POLY 0xd5
 const uint8_t EMPTY_LINK_STATS_PACKET[] = {0xea, 0x0c, 0x14, 0x78, 0x78, 0x00, 0xec, 0x00, 0x07, 0x02, 0x78, 0x00, 0xec, 0x90};
 #define EMPTY_LINK_STATS_PACKET_SIZE 14
 
