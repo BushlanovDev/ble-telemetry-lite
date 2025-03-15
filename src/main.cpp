@@ -8,8 +8,8 @@ uint8_t crsfBuffer[CRSF_MAX_PACKET_SIZE];
 size_t crsfIndex = 0;
 GENERIC_CRC8 crsfCrc(CRSF_CRC_POLY);
 
-uint32_t serial_baudrate = DEFAULT_SERIAL_BAUDRATE;
-std::string domain_name = DEFAULT_DOMAIN_NAME;
+uint32_t serialBaudrate = DEFAULT_SERIAL_BAUDRATE;
+std::string domainName = DEFAULT_DOMAIN_NAME;
 std::string password = DEFAULT_PASSWORD;
 
 uint8_t otaDone = 0;
@@ -65,19 +65,19 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
         if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID())
         {
-            serial_baudrate = *(uint32_t*)pCharacteristic->getValue().data();
-            preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, (uint32_t)serial_baudrate);
-            SerialPort.updateBaudRate(serial_baudrate);
-            ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serial_baudrate);
+            serialBaudrate = *(uint32_t*)pCharacteristic->getValue().data();
+            preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, (uint32_t)serialBaudrate);
+            SerialPort.updateBaudRate(serialBaudrate);
+            ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serialBaudrate);
         }
         else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID())
         {
-            domain_name.assign((char*)pCharacteristic->getValue().data(), pCharacteristic->getLength());
+            domainName.assign((char*)pCharacteristic->getValue().data(), pCharacteristic->getLength());
             preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, (char*)pCharacteristic->getValue().data(), pCharacteristic->getLength());
-            NimBLEDevice::setDeviceName(domain_name);
+            NimBLEDevice::setDeviceName(domainName);
             pAdvertising = NimBLEDevice::getAdvertising();
-            pAdvertising->setName(domain_name);
-            ESP_LOGI(TAG, "Domain name updated: %s", domain_name.c_str());
+            pAdvertising->setName(domainName);
+            ESP_LOGI(TAG, "Domain name updated: %s", domainName.c_str());
         }
         else if (pCharacteristic->getUUID() == pCharacteristicMode->getUUID())
         {
@@ -150,18 +150,18 @@ void handleSetSettings(AsyncWebServerRequest *request)
 {
     if (request->hasArg(PREFERENCES_REC_SERIAL_BAUDRATE))
     {
-        serial_baudrate = (uint32_t)request->arg(PREFERENCES_REC_SERIAL_BAUDRATE).toInt();
-        preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, serial_baudrate);
-        SerialPort.updateBaudRate(serial_baudrate);
-        ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serial_baudrate);
+        serialBaudrate = (uint32_t)request->arg(PREFERENCES_REC_SERIAL_BAUDRATE).toInt();
+        preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, serialBaudrate);
+        SerialPort.updateBaudRate(serialBaudrate);
+        ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serialBaudrate);
         request->send(200);
     }
 
     if (request->hasArg(PREFERENCES_REC_DOMAIN_NAME))
     {
-        domain_name = request->arg(PREFERENCES_REC_DOMAIN_NAME).c_str();
-        preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name.c_str(), domain_name.length());
-        ESP_LOGI(TAG, "Domain name updated: %s", domain_name.c_str());
+        domainName = request->arg(PREFERENCES_REC_DOMAIN_NAME).c_str();
+        preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domainName.c_str(), domainName.length());
+        ESP_LOGI(TAG, "Domain name updated: %s", domainName.c_str());
         request->send(200);
         delay(500);
         esp_restart();
@@ -194,13 +194,13 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 
 void initSerial()
 {
-    SerialPort.begin(serial_baudrate, SERIAL_8N1, SERIAL_PIN_RX, SERIAL_PIN_TX);
+    SerialPort.begin(serialBaudrate, SERIAL_8N1, SERIAL_PIN_RX, SERIAL_PIN_TX);
     ESP_LOGI(TAG, "Serial initialized");
 }
 
 void initBLE()
 {
-    NimBLEDevice::init(domain_name);
+    NimBLEDevice::init(domainName);
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
 
@@ -221,11 +221,11 @@ void initBLE()
 
     pCharacteristicBaudrate = pServiceConfig->createCharacteristic("FFF1", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
     pCharacteristicBaudrate->setCallbacks(&chrCallbacks);
-    pCharacteristicBaudrate->setValue(serial_baudrate);
+    pCharacteristicBaudrate->setValue(serialBaudrate);
 
     pCharacteristicDomain = pServiceConfig->createCharacteristic("FFF2", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
     pCharacteristicDomain->setCallbacks(&chrCallbacks);
-    pCharacteristicDomain->setValue(domain_name);
+    pCharacteristicDomain->setValue(domainName);
 
     pCharacteristicMode = pServiceConfig->createCharacteristic("FFF3", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR);
     pCharacteristicMode->setCallbacks(&chrCallbacks);
@@ -238,7 +238,7 @@ void initBLE()
     pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(pServiceExchange->getUUID());
     pAdvertising->addServiceUUID(pServiceConfig->getUUID());
-    pAdvertising->setName(domain_name);
+    pAdvertising->setName(domainName);
     pAdvertising->start();
 
     NimBLEDevice::setMTU(CRSF_MAX_PACKET_SIZE + 3);
@@ -250,9 +250,9 @@ void initBLE()
 void initWiFi()
 {
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(domain_name.c_str(), password.c_str());
+    WiFi.softAP(domainName.c_str(), password.c_str());
 
-    ESP_LOGI(TAG, "WiFi AP initialized name: %s, password: %s", domain_name.c_str(), password.c_str());
+    ESP_LOGI(TAG, "WiFi AP initialized name: %s, password: %s", domainName.c_str(), password.c_str());
 }
 
 void initWebServer()
@@ -268,8 +268,8 @@ void initWebServer()
         response += "\"model\": \"" + String(MODEL) + "\", ";
         response += "\"firmware\": \"" + String(FIRMWARE) + "\", ";
 
-        response += "\"" + String(PREFERENCES_REC_DOMAIN_NAME) + "\": \"" + domain_name.c_str() + "\", ";
-        response += "\"" + String(PREFERENCES_REC_SERIAL_BAUDRATE) + "\": \"" + String(serial_baudrate) + "\", ";
+        response += "\"" + String(PREFERENCES_REC_DOMAIN_NAME) + "\": \"" + domainName.c_str() + "\", ";
+        response += "\"" + String(PREFERENCES_REC_SERIAL_BAUDRATE) + "\": \"" + String(serialBaudrate) + "\", ";
         response += "\"" + String(PREFERENCES_REC_MODE) + "\": \"" + String(mode) + "\"";
 
         response += "}";
@@ -294,18 +294,18 @@ void initPreferences()
 
     if (preferences.isKey(PREFERENCES_REC_SERIAL_BAUDRATE))
     {
-        serial_baudrate = preferences.getUInt(PREFERENCES_REC_SERIAL_BAUDRATE);
+        serialBaudrate = preferences.getUInt(PREFERENCES_REC_SERIAL_BAUDRATE);
     }
 
     if (!preferences.isKey(PREFERENCES_REC_DOMAIN_NAME))
     {
-        preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name.c_str(), domain_name.length());
+        preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domainName.c_str(), domainName.length());
     }
     else
     {
         char domain_name_buffer[32];
         unsigned int buffer_length = preferences.getBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name_buffer, 32);
-        domain_name.assign(domain_name_buffer, buffer_length);
+        domainName.assign(domain_name_buffer, buffer_length);
     }
 
     if (preferences.isKey(PREFERENCES_REC_MODE))
@@ -440,7 +440,12 @@ void IRAM_ATTR loop()
     while (SerialPort.available())
     {
         const uint8_t byte = SerialPort.read();
-        if (crsfIndex == 0 && byte != CRSF_ADDRESS_RADIO_TRANSMITTER)
+        if (crsfIndex == 0 &&
+            byte != CRSF_ADDRESS_RADIO &&
+            byte != CRSF_ADDRESS_RX &&
+            byte != CRSF_ADDRESS_TX &&
+            byte != CRSF_SYNC_BYTE
+        )
         {
             return;
         }

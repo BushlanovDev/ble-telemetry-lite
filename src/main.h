@@ -48,14 +48,17 @@
 #define FIRMWARE "0.4.0"
 
 // CRSF Protocol
-#define CRSF_ADDRESS_RADIO_TRANSMITTER 0xEA
+#define CRSF_ADDRESS_RADIO 0xEA
+#define CRSF_ADDRESS_RX 0xEC
+#define CRSF_ADDRESS_TX 0xEE
+#define CRSF_SYNC_BYTE 0xC8
 #define CRSF_PING_PACKET_ID 0x28
 #define CRSF_RC_SYNC_PACKET_ID 0x3A
 #define CRSF_MAX_PACKET_SIZE 64
 #define CRSF_MIN_PAYLOAD_SIZE 3
 #define CRSF_MAX_PAYLOAD_SIZE 62
-#define CRSF_CRC_POLY 0xd5
-const uint8_t EMPTY_LINK_STATS_PACKET[] = {0xea, 0x0c, 0x14, 0x78, 0x78, 0x00, 0xec, 0x00, 0x07, 0x02, 0x78, 0x00, 0xec, 0x90};
+#define CRSF_CRC_POLY 0xD5
+const uint8_t EMPTY_LINK_STATS_PACKET[] = {0xEA, 0x0C, 0x14, 0x78, 0x78, 0x00, 0xEC, 0x00, 0x07, 0x02, 0x78, 0x00, 0xEC, 0x90};
 #define EMPTY_LINK_STATS_PACKET_SIZE 14
 
 // Default values
@@ -75,9 +78,11 @@ const char *indexHtml = R"literal(
 <head>
 <meta charset="UTF-8">
 <title>BLE Telemetry Lite</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 * {margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif;}
 body {width: 100%; max-width: 480px; margin: auto; background: #121212; color: white; padding: 20px;}
+@media (max-width: 600px) { body {max-width: 100%; padding: 10px;} }
 h2 {color: #00ff99; text-align: center; margin: 20px 0;}
 table {width: 100%; border-collapse: collapse; background: #1e1e1e;}
 th, td {border: 1px solid #333; padding: 10px; text-align: left;}
@@ -106,18 +111,18 @@ textarea {width: 100%; height: 200px; background: #222; color: white; margin-top
 <h2>Settings</h2>
 <table>
 <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
-<tbody id='settings-table'></tbody>
+<tbody id="settings-table"></tbody>
 </table>
 <br>
-<div id='settings-inputs'></div>
+<div id="settings-inputs"></div>
 </div>
 <div id="update" class="tab-content">
 <h2>Firmware Update</h2>
-<form id='upload-form'>
-<input type='file' id='file'>
-<button type='submit' id='update-btn'>Update</button>
+<form id="upload-form">
+<input type="file" id="file">
+<button type="submit" id="update-btn">Update</button>
 </form>
-<div id='prg'></div>
+<div id="prg"></div>
 </div>
 <div id="telemetry" class="tab-content">
 <h2>Telemetry</h2>
@@ -126,8 +131,7 @@ textarea {width: 100%; height: 200px; background: #222; color: white; margin-top
 <tbody id="telemetry-table"></tbody>
 </table>
 <br>
-<button onclick="startWebSocket()">Connect</button>
-<textarea id="log" readonly></textarea>
+<button id="ws-btn" onclick="toggleWebSocket()">Connect</button>
 </div>
 <script>
 function showTab(tabId) {
@@ -169,20 +173,55 @@ document.getElementById('upload-form').addEventListener('submit', e => {
     req.onload = req.onerror = () => updateBtn.disabled = false;
     req.send(new FormData(e.target));
 });
-function startWebSocket() {
-    let socket = new WebSocket("ws://192.168.4.1/ws");
-    let log = document.getElementById('log');
-    socket.binaryType = "arraybuffer";
-    socket.onmessage = function (e) {
-        if (e.data instanceof ArrayBuffer) {
-            let bytes = new Uint8Array(e.data);
-            processCRSFData(bytes);
-            let hexString = Array.from(bytes, byte => '0x' + byte.toString(16).padStart(2, '0')).join(' ');
-            log.value += hexString + "\n";
-        } else {
-            log.value += e.data.toString() + "\n";
-        }
-    };
+let socket = null;
+function toggleWebSocket() {
+    let btn = document.getElementById("ws-btn");
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+    } else {
+        socket = new WebSocket("ws://192.168.4.1/ws");
+        socket.binaryType = "arraybuffer";
+        socket.onopen = () => btn.textContent = "Disconnect";
+        socket.onclose = () => btn.textContent = "Connect";
+        socket.onmessage = (e) => {
+            if (e.data instanceof ArrayBuffer) {
+                let bytes = new Uint8Array(e.data);
+                processCRSFData(bytes);
+            }
+        };
+    }
+}
+function getPowerLabel(power) {
+    switch (power) {
+        case 1: return '10mW';
+        case 2: return '25mW';
+        case 3: return '100mW';
+        case 4: return '500mW';
+        case 5: return '1W';
+        case 6: return '2W';
+        case 7: return '250mW';
+        case 8: return '50mW';
+        default: return power;
+    }
+}
+function getELRSRateLabel(rate) {
+    switch (rate) {
+        case 0: return 'L4';
+        case 1: return 'L25';
+        case 2: return 'L50';
+        case 3: return 'L100c';
+        case 4: return 'L100';
+        case 5: return 'L150';
+        case 6: return 'L200';
+        case 7: return 'L250';
+        case 8: return 'L333c';
+        case 9: return 'L500';
+        case 10: return 'D250';
+        case 11: return 'D500';
+        case 12: return 'F500';
+        case 13: return 'F1000';
+        default: return rate;
+    }
 }
 function processCRSFData(bytes) {
     let packetType = bytes[2];
@@ -191,25 +230,35 @@ function processCRSFData(bytes) {
         case 0x08:
             let voltage = (payload[0] << 8 | payload[1]) / 10;
             let current = (payload[2] << 8 | payload[3]) / 10;
-            addRow("Voltage", voltage + "V");
-            addRow("Current", current + "A");
+            let capacity = (payload[4] << 16 | payload[5] << 8 | payload[6]) / 10;
+            addRow("Voltage", voltage + " V");
+            addRow("Current", current + " A");
+            addRow("Used capacity", capacity + " mAh");
             break;
         case 0x02:
             let latitude = ((payload[0] << 24) | (payload[1] << 16) | (payload[2] << 8) | payload[3]) / 1e7;
             let longitude = ((payload[4] << 24) | (payload[5] << 16) | (payload[6] << 8) | payload[7]) / 1e7;
             let speed = ((payload[8] << 8) | payload[9]) / 10;
-            let altitude = ((payload[12] << 8) | payload[13]) - 1000;
+            let altitudeGPS = ((payload[12] << 8) | payload[13]) - 1000;
+            let satellite = payload[14];
             addRow("Latitude", latitude.toFixed(6));
             addRow("Longitude", longitude.toFixed(6));
             addRow("Speed", speed + " km/h");
-            addRow("Altitude", altitude + " m");
+            addRow("Altitude GPS", altitudeGPS + " m");
+            addRow("Satellites", satellite);
             break;
         case 0x14:
             addRow("Uplink RSSI Ant. 1", "-" + payload[0] + " dBm");
             addRow("Uplink RSSI Ant. 2", "-" + payload[1] + " dBm");
             addRow("Uplink LQ", payload[2] + "%");
-            addRow("TX Power", payload[6] + " mW");
+            addRow("Rate", getELRSRateLabel(payload[5]));
+            addRow("TX Power", getPowerLabel(payload[6]));
             addRow("Downlink RSSI", "-" + payload[7] + " dBm");
+            addRow("Downlink LQ", payload[8] + "%");
+            break;
+        case 0x09:
+            let altitude = ((payload[0] << 8) | payload[1]) - 1000;
+            addRow("Altitude", altitude + " m");
             break;
     }
 }
