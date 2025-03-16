@@ -68,8 +68,8 @@ const uint8_t EMPTY_LINK_STATS_PACKET[] = {0xEA, 0x0C, 0x14, 0x78, 0x78, 0x00, 0
 #define DEFAULT_BLE_LOW_PWR ESP_PWR_LVL_P3
 #define DEFAULT_BLE_HIGH_PWR ESP_PWR_LVL_P9
 #define DEFAULT_WEB_PORT 80
-#define DEFAULT_TIMEOUT_MS 120000  // 120 seconds
-#define DEFAULT_BLE_LINKSTATS_PACKET_PERIOD_MS 200
+#define DEFAULT_TIMEOUT_MS 120000
+#define DEFAULT_BLE_LINKSTATS_PACKET_PERIOD_MS 250
 
 // HTML pages
 const char *indexHtml = R"literal(
@@ -86,9 +86,10 @@ body {width: 100%; max-width: 480px; margin: auto; background: #121212; color: w
 h2 {color: #00ff99; text-align: center; margin: 20px 0;}
 table {width: 100%; border-collapse: collapse; background: #1e1e1e;}
 th, td {border: 1px solid #333; padding: 10px; text-align: left;}
-.setting {display: flex; gap: 5px; margin-bottom: 5px;}
-input, button {padding: 8px; border: none; outline: none;}
-input {flex: 1; background: #222; color: white;}
+.setting {display: flex; gap: 5px; margin-bottom: 10px;}
+input, button, select {padding: 8px; border: none; outline: none;}
+input, select {flex: 1; background: #222; color: white; width: 100%;}
+select {text-overflow: ellipsis; white-space: nowrap; overflow: hidden;}
 button {background: #00ff99; color: black; cursor: pointer;}
 button:hover {opacity: 0.8;}
 form {text-align: center; margin-top: 10px;}
@@ -114,7 +115,30 @@ textarea {width: 100%; height: 200px; background: #222; color: white; margin-top
 <tbody id="settings-table"></tbody>
 </table>
 <br>
-<div id="settings-inputs"></div>
+<div id="settings-inputs">
+<label>Name of Bluetooth device and Wi-Fi hotspot</label>
+<div class='setting'><input id='domain_name' value=''><button onclick='updateSetting("domain_name")'>Save</button></div>
+<label>Module connection speed</label>
+<div class='setting'><select id="serial_baudrate">
+<option value="57600">57k EdgeTX versions earlier than 2.10, via Serial AUX (except TX16)</option>
+<option value="115200">115k EdgeTX versions 2.10 and later, via Serial AUX + all EdgeTX versions with TX16</option>
+<option value="400000">400k direct connection to internal ELRS/TBS module</option>
+<option value="921600">921k direct connection to internal ELRS/TBS module</option>
+<option value="1870000">1.87M direct connection to internal ELRS/TBS module</option>
+<option value="3750000">3.75M direct connection to internal module ELRS/TBS</option>
+<option value="5250000">5.25M direct connection to the internal ELRS/TBS module</option>
+</select>
+<button onclick='updateSetting("serial_baudrate")'>Save</button>
+</div>
+<label>Module operating mode</label>
+<div class='setting'>
+<select id="mode">
+<option value="0">BLE</option>
+<option value="1">Wi-Fi</option>
+</select>
+<button onclick='updateSetting("mode")'>Save</button>
+</div>
+</div>
 </div>
 <div id="update" class="tab-content">
 <h2>Firmware Update</h2>
@@ -122,6 +146,7 @@ textarea {width: 100%; height: 200px; background: #222; color: white; margin-top
 <input type="file" id="file">
 <button type="submit" id="update-btn">Update</button>
 </form>
+<br>
 <div id="prg"></div>
 </div>
 <div id="telemetry" class="tab-content">
@@ -147,7 +172,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     ['vendor', 'model', 'firmware'].forEach(k => data[k] && (tableBody.innerHTML += `<tr><td>${k}</td><td>${data[k]}</td></tr>`));
     let settingsDiv = document.getElementById('settings-inputs');
     ['domain_name', 'serial_baudrate', 'mode'].forEach(k => {
-        if (data[k]) settingsDiv.innerHTML += `<div class='setting'><input id='${k}' value='${data[k]}'><button onclick='updateSetting("${k}")'>Save</button></div>`;
+        if (data[k]) document.getElementById(k).value = data[k];
     });
 });
 function updateSetting(k) {
@@ -193,14 +218,14 @@ function toggleWebSocket() {
 }
 function getPowerLabel(power) {
     switch (power) {
-        case 1: return '10mW';
-        case 2: return '25mW';
-        case 3: return '100mW';
-        case 4: return '500mW';
-        case 5: return '1W';
-        case 6: return '2W';
-        case 7: return '250mW';
-        case 8: return '50mW';
+        case 1: return '10 mW';
+        case 2: return '25 mW';
+        case 3: return '100 mW';
+        case 4: return '500 mW';
+        case 5: return '1 W';
+        case 6: return '2 W';
+        case 7: return '250 mW';
+        case 8: return '50 mW';
         default: return power;
     }
 }
@@ -226,18 +251,19 @@ function getELRSRateLabel(rate) {
 function processCRSFData(bytes) {
     let packetType = bytes[2];
     let payload = bytes.slice(3, -1);
+    let dataView = new DataView(payload.buffer);
     switch (packetType) {
         case 0x08:
             let voltage = (payload[0] << 8 | payload[1]) / 10;
             let current = (payload[2] << 8 | payload[3]) / 10;
-            let capacity = (payload[4] << 16 | payload[5] << 8 | payload[6]) / 10;
+            let capacity = (payload[4] << 16 | payload[5] << 8 | payload[6]);
             addRow("Voltage", voltage + " V");
             addRow("Current", current + " A");
             addRow("Used capacity", capacity + " mAh");
             break;
         case 0x02:
-            let latitude = ((payload[0] << 24) | (payload[1] << 16) | (payload[2] << 8) | payload[3]) / 1e7;
-            let longitude = ((payload[4] << 24) | (payload[5] << 16) | (payload[6] << 8) | payload[7]) / 1e7;
+            let latitude = dataView.getInt32(0, false) / 1e7;
+            let longitude = dataView.getInt32(4, false) / 1e7;
             let speed = ((payload[8] << 8) | payload[9]) / 10;
             let altitudeGPS = ((payload[12] << 8) | payload[13]) - 1000;
             let satellite = payload[14];
@@ -248,12 +274,12 @@ function processCRSFData(bytes) {
             addRow("Satellites", satellite);
             break;
         case 0x14:
-            addRow("Uplink RSSI Ant. 1", "-" + payload[0] + " dBm");
-            addRow("Uplink RSSI Ant. 2", "-" + payload[1] + " dBm");
+            addRow("Uplink RSSI Ant. 1", (payload[0] != 0 ? (payload[0] - 256) : 0) + " dBm");
+            addRow("Uplink RSSI Ant. 2", (payload[1] != 0 ? (payload[1] - 256) : 0) + " dBm");
             addRow("Uplink LQ", payload[2] + "%");
             addRow("Rate", getELRSRateLabel(payload[5]));
             addRow("TX Power", getPowerLabel(payload[6]));
-            addRow("Downlink RSSI", "-" + payload[7] + " dBm");
+            addRow("Downlink RSSI", (payload[7] != 0 ? (payload[7] - 256) : 0) + " dBm");
             addRow("Downlink LQ", payload[8] + "%");
             break;
         case 0x09:
