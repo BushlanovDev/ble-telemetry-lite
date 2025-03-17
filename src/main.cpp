@@ -115,20 +115,24 @@ void handleUpdate(AsyncWebServerRequest *request, const String& filename, size_t
     {
         fsize = request->arg("size").toInt();
     }
+    else
+    {
+        fsize = request->contentLength();
+    }
 
     if (!index)
     {
         ESP_LOGI(TAG, "Receiving Update: %s, Size: %d", filename, fsize);
         if (!Update.begin(fsize))
         {
-            ESP_LOGI(TAG, "Error: %s\n", Update.errorString());
+            ESP_LOGI(TAG, "Error: %s", Update.errorString());
             Update.printError(Serial);
         }
     }
 
     if (Update.write(data, len) != len)
     {
-        ESP_LOGI(TAG, "Error: %s\n", Update.errorString());
+        ESP_LOGI(TAG, "Error: %s", Update.errorString());
         Update.printError(Serial);
     }
 
@@ -136,12 +140,16 @@ void handleUpdate(AsyncWebServerRequest *request, const String& filename, size_t
     {
         if (!Update.end(true))
         {
-            ESP_LOGI(TAG, "Error: %s\n", Update.errorString());
+            ESP_LOGI(TAG, "Error: %s", Update.errorString());
             Update.printError(Serial);
         }
         else
         {
-            ESP_LOGI(TAG, "Update Success: %u bytes\nRebooting...", fsize);
+            ESP_LOGI(TAG, "Update Success: %u bytes Rebooting...", fsize);
+            AsyncWebServerResponse *response = request->beginResponse(307);
+            response->addHeader("Refresh","10");
+            response->addHeader("Location","/");
+            request->send(response);
         }
     }
 }
@@ -190,6 +198,19 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
         ESP_LOGI(TAG, "WebSocket client disconnected from %s", client->remoteIP().toString().c_str());
         wsClient = nullptr;
     }
+}
+
+void onWiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info)
+{
+    ESP_LOGI(TAG, "WiFi client connected power up and disabling shutdown timer");
+    WiFi.setTxPower(DEFAULT_WIFI_HIGH_PWR);
+    deviceShouldShutdown = false;
+}
+
+void onWiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
+{
+    ESP_LOGI(TAG, "WiFi client disconnected power down");
+    WiFi.setTxPower(DEFAULT_WIFI_LOW_PWR);
 }
 
 void initSerial()
@@ -251,7 +272,9 @@ void initWiFi()
 {
     WiFi.mode(WIFI_AP);
     WiFi.softAP(domainName.c_str(), password.c_str());
-
+    WiFi.onEvent(onWiFiStationConnected, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
+    WiFi.onEvent(onWiFiStationDisconnected, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
+    WiFi.setTxPower(DEFAULT_WIFI_LOW_PWR);
     ESP_LOGI(TAG, "WiFi AP initialized name: %s, password: %s", domainName.c_str(), password.c_str());
 }
 
@@ -398,12 +421,6 @@ void setup()
 
 void IRAM_ATTR loop()
 {
-    if (mode == MODE_WEB && deviceShouldShutdown && WiFi.softAPgetStationNum() > 0)
-    {
-        ESP_LOGI(TAG, "WiFi client connected, disabling shutdown timer");
-        deviceShouldShutdown = false;
-    }
-
     if (deviceShouldShutdown && millis() - startTime >= DEFAULT_TIMEOUT_MS)
     {
         ESP_LOGI(TAG, "Timeout reached, going to sleep, bye bye");

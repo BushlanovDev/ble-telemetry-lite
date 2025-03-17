@@ -70,6 +70,8 @@ const uint8_t EMPTY_LINK_STATS_PACKET[] = {0xEA, 0x0C, 0x14, 0x78, 0x78, 0x00, 0
 #define DEFAULT_WEB_PORT 80
 #define DEFAULT_TIMEOUT_MS 120000
 #define DEFAULT_BLE_LINKSTATS_PACKET_PERIOD_MS 250
+#define DEFAULT_WIFI_LOW_PWR WIFI_POWER_2dBm
+#define DEFAULT_WIFI_HIGH_PWR WIFI_POWER_8_5dBm
 
 // HTML pages
 const char *indexHtml = R"literal(
@@ -117,9 +119,9 @@ textarea {width: 100%; height: 200px; background: #222; color: white; margin-top
 <br>
 <div id="settings-inputs">
 <label>Name of Bluetooth device and Wi-Fi hotspot</label>
-<div class='setting'><input id='domain_name' value=''><button onclick='updateSetting("domain_name")'>Save</button></div>
+<div class="setting"><input id="domain_name" value=""><button onclick='updateSetting("domain_name")'>Save</button></div>
 <label>Module connection speed</label>
-<div class='setting'><select id="serial_baudrate">
+<div class="setting"><select id="serial_baudrate">
 <option value="57600">57k EdgeTX versions earlier than 2.10, via Serial AUX (except TX16)</option>
 <option value="115200">115k EdgeTX versions 2.10 and later, via Serial AUX + all EdgeTX versions with TX16</option>
 <option value="400000">400k direct connection to internal ELRS/TBS module</option>
@@ -131,7 +133,7 @@ textarea {width: 100%; height: 200px; background: #222; color: white; margin-top
 <button onclick='updateSetting("serial_baudrate")'>Save</button>
 </div>
 <label>Module operating mode</label>
-<div class='setting'>
+<div class="setting">
 <select id="mode">
 <option value="0">BLE</option>
 <option value="1">Wi-Fi</option>
@@ -143,8 +145,10 @@ textarea {width: 100%; height: 200px; background: #222; color: white; margin-top
 <div id="update" class="tab-content">
 <h2>Firmware Update</h2>
 <form id="upload-form">
-<input type="file" id="file">
+<div class="setting">
+<input type="file" id="file" name="update">
 <button type="submit" id="update-btn">Update</button>
+</div>
 </form>
 <br>
 <div id="prg"></div>
