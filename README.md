@@ -34,6 +34,10 @@
 
 Если используется аппаратура без SerialAUX, необходимо контакт TX внутреннего модуля ELRS/CrossFire подключить к контакту RX(3) модуля.
 
+Подключение к TX внутреннего модуля на примере аппаратуры Jumper T20
+
+<img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/esp32-c3-supermini_to_jumper-t20.jpg?raw=true" width="50%" alt="Подключение к TX внутреннего модуля на примере аппаратуры Jumper T2" title="Подключение к TX внутреннего модуля на примере аппаратуры Jumper T2t" />
+
 ## Прошивка и настройка
 
 Прошить модуль можно с помощью [Web-прошивальщика](https://configurator.skydevices.ru).

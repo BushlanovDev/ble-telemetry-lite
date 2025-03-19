@@ -235,16 +235,16 @@ function getPowerLabel(power) {
 }
 function getELRSRateLabel(rate) {
     switch (rate) {
-        case 0: return 'L4';
-        case 1: return 'L25';
-        case 2: return 'L50';
-        case 3: return 'L100c';
-        case 4: return 'L100';
-        case 5: return 'L150';
-        case 6: return 'L200';
-        case 7: return 'L250';
-        case 8: return 'L333c';
-        case 9: return 'L500';
+        case 0: return '4';
+        case 1: return '25';
+        case 2: return '50';
+        case 3: return '100c';
+        case 4: return '100';
+        case 5: return '150';
+        case 6: return '200';
+        case 7: return '250';
+        case 8: return '333c';
+        case 9: return '500';
         case 10: return 'D250';
         case 11: return 'D500';
         case 12: return 'F500';
@@ -271,8 +271,10 @@ function processCRSFData(bytes) {
             let speed = ((payload[8] << 8) | payload[9]) / 10;
             let altitudeGPS = ((payload[12] << 8) | payload[13]) - 1000;
             let satellite = payload[14];
-            addRow("Latitude", latitude.toFixed(6));
-            addRow("Longitude", longitude.toFixed(6));
+            if (latitude != 0.0 && longitude != 0.0) {
+                addRow("Latitude", latitude.toFixed(6));
+                addRow("Longitude", longitude.toFixed(6));
+            }
             addRow("Speed", speed + " km/h");
             addRow("Altitude GPS", altitudeGPS + " m");
             addRow("Satellites", satellite);
