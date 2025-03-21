@@ -430,7 +430,16 @@ void IRAM_ATTR loop()
 #ifdef BOARD_ESP32C3
     if (digitalRead(BOOT_PIN) == 0)
     {
-        preferences.putUInt(PREFERENCES_REC_MODE, MODE_BLE);
+        if (mode == MODE_BLE)
+        {
+            preferences.putUInt(PREFERENCES_REC_MODE, MODE_WEB);
+            ESP_LOGI(TAG, "Rebooting in Web mode");
+        }
+        else
+        {
+            preferences.putUInt(PREFERENCES_REC_MODE, MODE_BLE);
+            ESP_LOGI(TAG, "Rebooting in BLE mode");
+        }
         esp_restart();
     }
 #endif
