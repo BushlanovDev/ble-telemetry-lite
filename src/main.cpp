@@ -1,4 +1,5 @@
 #include "main.h"
+#include "index_html.h"
 
 Preferences preferences;
 
@@ -12,7 +13,6 @@ uint32_t serialBaudrate = DEFAULT_SERIAL_BAUDRATE;
 std::string domainName = DEFAULT_DOMAIN_NAME;
 std::string password = DEFAULT_PASSWORD;
 
-uint8_t otaDone = 0;
 uint8_t mode = MODE_BLE;
 
 bool bleDeviceConnected = false;
@@ -301,7 +301,7 @@ void initWebServer()
     });
 
     webServer.on("/", [](AsyncWebServerRequest *request) {
-        request->send(200, "text/html", indexHtml);
+        request->send(200, "text/html", (const uint8_t*)data_index_html, data_index_html_len);
     });
 
     ws.onEvent(onWsEvent);
