@@ -98,7 +98,6 @@
         let data = await res.json();
         let tableBody = document.querySelector('#settings-table');
         ['vendor', 'model', 'firmware'].forEach(k => data[k] && (tableBody.innerHTML += `<tr><td>${k}</td><td>${data[k]}</td></tr>`));
-        let settingsDiv = document.getElementById('settings-inputs');
         ['domain_name', 'serial_baudrate', 'mode'].forEach(k => {
             if (data[k]) document.getElementById(k).value = data[k];
         });
@@ -192,8 +191,8 @@
             case 0x02:
                 let latitude = dataView.getInt32(0, false) / 1e7;
                 let longitude = dataView.getInt32(4, false) / 1e7;
-                let speed = ((payload[8] << 8) | payload[9]) / 10;
-                let altitudeGPS = ((payload[12] << 8) | payload[13]) - 1000;
+                let speed = (payload[8] << 8 | payload[9]) / 10;
+                let altitudeGPS = (payload[12] << 8 | payload[13]) - 1000;
                 let satellite = payload[14];
                 if (latitude != 0.0 && longitude != 0.0) {
                     addRow("Latitude", latitude.toFixed(6));
@@ -213,8 +212,12 @@
                 addRow("Downlink LQ", payload[8] + "%");
                 break;
             case 0x09:
-                let altitude = ((payload[0] << 8) | payload[1]) - 1000;
+                let altitude = (payload[0] << 8 | payload[1]) - 1000;
                 addRow("Altitude", altitude + " m");
+                break;
+            case 0x0A:
+                let airspeed = (payload[0] << 8 | payload[1]) / 10;
+                addRow("Airspeed", airspeed.toFixed(1) + " km/h");
                 break;
         }
     }
