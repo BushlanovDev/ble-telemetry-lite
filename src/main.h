@@ -19,12 +19,12 @@
 
 // Hardware
 #define SERIAL_PORT 1
-#define LED_PIN 8
 
 #ifdef BOARD_ESP32C3
 #define SERIAL_PIN_RX 3
 #define SERIAL_PIN_TX 4
 #define BOOT_PIN 9
+#define LED_PIN 8
 #endif
 
 #ifdef BOARD_ESP32S3

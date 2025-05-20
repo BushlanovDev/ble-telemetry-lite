@@ -396,8 +396,8 @@ void setup()
     esp_log_level_set("*", ESP_LOG_NONE);
 #endif
 
-    pinMode(LED_PIN, OUTPUT);
 #ifdef BOARD_ESP32C3
+    pinMode(LED_PIN, OUTPUT);
     pinMode(BOOT_PIN, INPUT);
 #endif
     initPreferences();
@@ -407,13 +407,17 @@ void setup()
     if (mode == MODE_BLE)
     {
         initBLE();
+#ifdef BOARD_ESP32C3
         digitalWrite(LED_PIN, HIGH);
+#endif
     }
     else if (mode == MODE_WEB)
     {
         initWiFi();
         initWebServer();
+#ifdef BOARD_ESP32C3
         digitalWrite(LED_PIN, LOW);
+#endif
     }
 
     startTime = millis();
