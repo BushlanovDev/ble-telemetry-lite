@@ -1,50 +1,53 @@
 # BLE Telemetry Lite
 
-ПО для микроконтроллеров **ESP32-C3**, **ESP32-S3** и т.п. для трансляции телеметрии Crossfire и ELRS от аппаратур радиоуправления по Bluetooth или Wi-Fi.
+[English](./README.md) | [Russian](./README_RU.md)
 
-## Возможности
+Firmware for **ESP32-C3**, **ESP32-S3**, and similar microcontrollers, enabling telemetry broadcast from Crossfire and ELRS radio systems over Bluetooth or Wi-Fi.
 
- - Передача телеметрии Crossfire/ELRS на телефоны/планшеты/ноутбуки с аппаратур радиоуправления по Bluetooth или Wi-Fi
- - Подключение не только на аппаратуры с Aux-serial, но и напрямую к внутреннему модулю (Jumper RC до T15)
- - Отображение телеметрии через [TelemetryViewer](https://github.com/RomanLut/android-taranis-smartport-telemetry/releases), [WebTelemetry](http://telemetry.skydevices.ru) или встроенный Web интерфейс
+## Features
 
-## Аппаратное обеспечение
+* Transmits Crossfire/ELRS telemetry from RC transmitters to phones, tablets, or laptops via Bluetooth or Wi-Fi
+* Compatible with transmitters using Aux-serial output as well as direct connection to internal modules (e.g. Jumper RC up to T15)
+* Telemetry display supported via [TelemetryViewer](https://github.com/RomanLut/android-taranis-smartport-telemetry/releases), [WebTelemetry](http://telemetry.skydevices.ru), or the built-in web interface
 
-Плата разработчика **ESP32-C3-SuperMini** (рекомендуется) или **ESP32-S3-SuperMini**. 
-Возможно подойдут другие микроконтроллеры esp32 с поддержкой стеков BLE и Wi-Fi, но совместимость не проверялась и не гарантируется.
+## Hardware
+
+Development boards **ESP32-C3-SuperMini** (recommended) or **ESP32-S3-SuperMini**.
+Other ESP32-based boards with BLE and Wi-Fi support may also work, but compatibility is untested and not guaranteed.
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/esp32-c3_esp32-s3.jpg?raw=true" width="60%" alt="ESP32-C3-SuperMini & ESP32-S3-SuperMini"/>
 
-Предлагаемые платы - компактные, не дорогие и не обвешены лишними компонентами. 
-Если используете другие платы с микроконтроллерами **ESP32-C3** / **ESP32-S3**, помните - номера контактов для подключения, 
-соответствуют номерам контактов микроконтроллера. На других платах нумерация контактов платы может быть изменена и не 
-соответствовать нумерации процессора. В таком случае изучите datasheet на вашу плату, чтобы найти нужные контакты.
+These boards are compact, affordable, and free from unnecessary components.
+If using a different **ESP32-C3** or **ESP32-S3** board, note that pin numbering may differ from the microcontroller's internal pin numbers.
+Refer to your board’s datasheet to identify correct pin mappings.
 
-## Подключение
+## Wiring
 
-Модуль подключается к SerialAUX аппаратуры. Необходимы 4 провода:
- - 5V
- - Gnd
- - Tx - подключается к контакту 3 (RX модуля)
- - Rx - подключается к контакту 4 (TX модуля)
+The module connects to the transmitter’s SerialAUX interface using 4 wires:
 
-Подключение на примере аппаратуры RadioMaster Pocket
+* 5V
+* GND
+* TX → to pin 3 (module RX)
+* RX → to pin 4 (module TX)
 
-<img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/esp32-c3-supermini_to_rm_pocket.jpg?raw=true" width="50%" alt="Подключение на примере аппаратуры RadioMaster Pocket" title="Подключение на примере аппаратуры RadioMaster Pocket" />
+Wiring to a RadioMaster Pocket transmitter example
 
-Если используется аппаратура без SerialAUX, необходимо контакт TX внутреннего модуля ELRS/CrossFire подключить к контакту RX(3) модуля.
+<img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/esp32-c3-supermini_to_rm_pocket.jpg?raw=true" width="50%" alt="Connection to RadioMaster Pocket" title="Connection to RadioMaster Pocket" />
 
-Подключение к TX внутреннего модуля на примере аппаратуры Jumper T20
+If the transmitter lacks SerialAUX, connect the ELRS/Crossfire internal module’s TX pin directly to the module’s RX (pin 3).
 
-<img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/esp32-c3-supermini_to_jumper-t20.jpg?raw=true" width="50%" alt="Подключение к TX внутреннего модуля на примере аппаратуры Jumper T2" title="Подключение к TX внутреннего модуля на примере аппаратуры Jumper T2t" />
+Connection to internal TX on a Jumper T20 transmitter example
 
-## Прошивка и настройка
+<img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/esp32-c3-supermini_to_jumper-t20.jpg?raw=true" width="50%" alt="Connection to Jumper T20 internal TX" title="Connection to Jumper T20 internal TX" />
 
-Прошить модуль можно с помощью [Web-прошивальщика](https://configurator.skydevices.ru) (старые версии). Там же осуществляется его настройка в режиме BLE.
+## Flashing and Configuration
 
-Переключить режим BLE/Wi-Fi можно нажатием кнопки Boot на модуле.
+Flash the firmware using the [Web Configurator](https://configurator.skydevices.ru) (for legacy versions).
+BLE mode configuration is also done through the same interface.
 
-В режиме Wi-Fi необходимо подлючиться к точке доступа **BLE Telemetry Lite** используя пароль **12345678**.  
-Web интерфейс доступен по адресу [http://192.168.4.1](http://192.168.4.1).
+Switch between BLE and Wi-Fi modes by pressing the **Boot** button on the module.
 
-<img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/web-interface.png" alt="Web интерфейс" title="Web интерфейс" />
+In Wi-Fi mode, connect to the **BLE Telemetry Lite** access point using the password: **12345678**.
+The web interface is accessible at [http://192.168.4.1](http://192.168.4.1).
+
+<img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/web-interface.png?raw=true" alt="Web Interface" title="Web Interface" />
