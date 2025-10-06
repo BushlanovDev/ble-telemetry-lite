@@ -50,3 +50,7 @@
 Web интерфейс доступен по адресу [http://192.168.4.1](http://192.168.4.1).
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/web-interface.png?raw=true" alt="Web интерфейс" title="Web интерфейс" />
+
+## Лицензия
+
+Данные проект аспространяется под лицензией MIT - подробности см. в файле [LICENSE](LICENSE).

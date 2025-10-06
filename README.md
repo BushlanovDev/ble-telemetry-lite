@@ -51,3 +51,7 @@ In Wi-Fi mode, connect to the **BLE Telemetry Lite** access point using the pass
 The web interface is accessible at [http://192.168.4.1](http://192.168.4.1).
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/web-interface.png?raw=true" alt="Web Interface" title="Web Interface" />
+
+## License
+
+This repository's source code is available under the [MIT License](LICENSE).
