@@ -28,7 +28,7 @@
  - 5V
  - GND
  - TX - подключается к контакту 3 (RX модуля)
- - RX - подключается к контакту 4 (TX модуля)
+ - RX - подключается к контакту 4 (TX модуля) (опционально)
 
 Подключение на примере аппаратуры RadioMaster Pocket
 
@@ -42,7 +42,7 @@
 
 ## Прошивка и настройка
 
-Прошить модуль можно с помощью [Web-прошивальщика](https://configurator.skydevices.ru) (старые версии). Там же осуществляется его настройка в режиме BLE.
+### Прошивка через web интерфейс
 
 Переключить режим BLE/Wi-Fi можно нажатием кнопки Boot на модуле.
 
@@ -51,6 +51,12 @@ Web интерфейс доступен по адресу [http://192.168.4.1](h
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/web-interface.png?raw=true" alt="Web интерфейс" title="Web интерфейс" />
 
+### Прошивка через Flash Download Tool
+
+Скачайте [Flash Download Tool](https://docs.espressif.com/projects/esp-test-tools/en/latest/esp32c3/production_stage/tools/flash_download_tool.html), выставите настройки как на скриншоте и не забудьте указать свой com порт.
+
+<img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/flasher-tool.png?raw=true" alt="Flash Download Tool" />
+
 ## Лицензия
 
-Данные проект аспространяется под лицензией MIT - подробности см. в файле [LICENSE](LICENSE).
+Данные проект распространяется под лицензией MIT - подробности см. в файле [LICENSE](LICENSE).

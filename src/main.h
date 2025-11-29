@@ -22,14 +22,14 @@
 
 #ifdef BOARD_ESP32C3
 #define SERIAL_PIN_RX 3
-#define SERIAL_PIN_TX 4
+// #define SERIAL_PIN_TX 4
 #define BOOT_PIN 9
 #define LED_PIN 8
 #endif
 
 #ifdef BOARD_ESP32S3
 #define SERIAL_PIN_RX 16
-#define SERIAL_PIN_TX 17
+// #define SERIAL_PIN_TX 17
 #endif
 
 // Preferences
@@ -45,7 +45,7 @@
 // Const values
 #define VENDOR "SkyDevices.ru"
 #define MODEL "BLE Telemetry Lite"
-#define FIRMWARE "0.4.1"
+#define FIRMWARE "0.4.2"
 
 // CRSF Protocol
 #define CRSF_ADDRESS_RADIO 0xEA

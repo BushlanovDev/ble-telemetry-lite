@@ -215,7 +215,8 @@ void onWiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
 
 void initSerial()
 {
-    SerialPort.begin(serialBaudrate, SERIAL_8N1, SERIAL_PIN_RX, SERIAL_PIN_TX);
+    SerialPort.setRxBufferSize(512);
+    SerialPort.begin(serialBaudrate, SERIAL_8N1, SERIAL_PIN_RX);
     ESP_LOGI(TAG, "Serial initialized");
 }
 
@@ -270,7 +271,7 @@ void initBLE()
 
 void initWiFi()
 {
-    WiFi.mode(WIFI_AP);
+    WiFiClass::mode(WIFI_AP);
     WiFi.softAP(domainName.c_str(), password.c_str());
     WiFi.onEvent(onWiFiStationConnected, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
     WiFi.onEvent(onWiFiStationDisconnected, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);

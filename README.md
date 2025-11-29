@@ -28,7 +28,7 @@ The module connects to the transmitter’s SerialAUX interface using 4 wires:
 * 5V
 * GND
 * TX → to pin 3 (module RX)
-* RX → to pin 4 (module TX)
+* RX → to pin 4 (module TX) (optional)
 
 Wiring to a RadioMaster Pocket transmitter example
 
@@ -42,8 +42,7 @@ Connection to internal TX on a Jumper T20 transmitter example
 
 ## Flashing and Configuration
 
-Flash the firmware using the [Web Configurator](https://configurator.skydevices.ru) (for legacy versions).
-BLE mode configuration is also done through the same interface.
+### Firmware via web interface
 
 Switch between BLE and Wi-Fi modes by pressing the **Boot** button on the module.
 
@@ -51,6 +50,12 @@ In Wi-Fi mode, connect to the **BLE Telemetry Lite** access point using the pass
 The web interface is accessible at [http://192.168.4.1](http://192.168.4.1).
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/web-interface.png?raw=true" alt="Web Interface" title="Web Interface" />
+
+### Firmware via Flash Download Tool
+
+Download [Flash Download Tool](https://docs.espressif.com/projects/esp-test-tools/en/latest/esp32c3/production_stage/tools/flash_download_tool.html), set the settings as shown in the screenshot and don't forget to specify your COM port.
+
+<img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/flasher-tool.png?raw=true" alt="Flash Download Tool" />
 
 ## License
 
