@@ -1,0 +1,30 @@
+---
+# clang-tidy config for ble-telemetry-lite (ESP32 / Arduino framework / C++11).
+#
+# How to run:
+#   pio run -e esp32c3supermini -t compiledb   # generates ./compile_commands.json
+#   clang-tidy -p . src/main.cpp
+#
+# Requires clang-tidy (LLVM) on PATH and a compile database (the `compiledb`
+# target above). Only src/ headers are diagnosed (HeaderFilterRegex); PlatformIO /
+# Arduino / ESP-IDF headers under .pio/ are suppressed to avoid floods of upstream
+# warnings. Existing code may still produce findings — focus on the files you touch.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-reserved-identifier,
+  -bugprone-narrowing-conversions,
+  -bugprone-easily-swappable-parameters,
+  performance-*,
+  -performance-no-int-to-ptr,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-loop-convert,
+  modernize-use-using,
+  modernize-deprecated-headers,
+  readability-simplify-boolean-expr,
+  readability-redundant-control-flow,
+  readability-container-data-pointer,
+WarningsAsErrors: ''
+HeaderFilterRegex: 'src/'
+FormatStyle: file

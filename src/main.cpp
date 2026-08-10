@@ -24,7 +24,7 @@ unsigned long packetCount = 0;
 
 AsyncWebServer webServer(DEFAULT_WEB_PORT);
 AsyncWebSocket ws("/ws");
-AsyncWebSocketClient* wsClient;
+AsyncWebSocketClient *wsClient;
 
 NimBLEAdvertising *pAdvertising;
 NimBLEServer *pServer;
@@ -41,7 +41,7 @@ NimBLECharacteristic *pCharacteristicDomain;
 NimBLECharacteristic *pCharacteristicMode;
 
 class ServerCallbacks final : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
+    void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override {
         bleDeviceConnected = true;
         deviceShouldShutdown = false;
         pServer->updateConnParams(connInfo.getConnHandle(), 6, 6, 0, 500);
@@ -49,39 +49,34 @@ class ServerCallbacks final : public NimBLEServerCallbacks {
         ESP_LOGI(TAG, "BLEServer onConnect power up and disable shutdown timer");
     }
 
-    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
+    void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override {
         bleDeviceConnected = false;
         NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR);
         NimBLEDevice::startAdvertising();
         ESP_LOGI(TAG, "BLEServer onDisconnect power down");
     }
 
-    void onMTUChange(uint16_t MTU, NimBLEConnInfo& connInfo) override {
+    void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override {
         ESP_LOGI(TAG, "MTU updated: %u for connection ID: %u", MTU, connInfo.getConnHandle());
     }
 };
 
 class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
-        if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID())
-        {
-            serialBaudrate = *(uint32_t*)pCharacteristic->getValue().data();
+    void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
+        if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID()) {
+            serialBaudrate = *(uint32_t *)pCharacteristic->getValue().data();
             preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, (uint32_t)serialBaudrate);
             SerialPort.updateBaudRate(serialBaudrate);
             ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serialBaudrate);
-        }
-        else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID())
-        {
-            domainName.assign((char*)pCharacteristic->getValue().data(), pCharacteristic->getLength());
-            preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, (char*)pCharacteristic->getValue().data(), pCharacteristic->getLength());
+        } else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID()) {
+            domainName.assign((char *)pCharacteristic->getValue().data(), pCharacteristic->getLength());
+            preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, (char *)pCharacteristic->getValue().data(), pCharacteristic->getLength());
             NimBLEDevice::setDeviceName(domainName);
             pAdvertising = NimBLEDevice::getAdvertising();
             pAdvertising->setName(domainName);
             ESP_LOGI(TAG, "Domain name updated: %s", domainName.c_str());
-        }
-        else if (pCharacteristic->getUUID() == pCharacteristicMode->getUUID())
-        {
-            mode = *(uint8_t*)pCharacteristic->getValue().data();
+        } else if (pCharacteristic->getUUID() == pCharacteristicMode->getUUID()) {
+            mode = *(uint8_t *)pCharacteristic->getValue().data();
             preferences.putUInt(PREFERENCES_REC_MODE, (uint8_t)mode);
             ESP_LOGI(TAG, "Mode updated: %d", mode);
             delay(500);
@@ -92,72 +87,55 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
 
 static CharacteristicCallbacks chrCallbacks;
 
-void handleUpdateEnd(AsyncWebServerRequest *request)
-{
-    if (Update.hasError())
-    {
+void handleUpdateEnd(AsyncWebServerRequest *request) {
+    if (Update.hasError()) {
         request->send(502, "text/plain", Update.errorString());
-    }
-    else
-    {
+    } else {
         AsyncWebServerResponse *response = request->beginResponse(307);
-        response->addHeader("Refresh","10");
-        response->addHeader("Location","/");
+        response->addHeader("Refresh", "10");
+        response->addHeader("Location", "/");
         request->send(response);
         ESP.restart();
     }
 }
 
-void handleUpdate(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final)
-{
+void handleUpdate(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
     size_t fsize = UPDATE_SIZE_UNKNOWN;
-    if (request->hasArg("size"))
-    {
+    if (request->hasArg("size")) {
         fsize = request->arg("size").toInt();
-    }
-    else
-    {
+    } else {
         fsize = request->contentLength();
     }
 
-    if (!index)
-    {
+    if (!index) {
         ESP_LOGI(TAG, "Receiving Update: %s, Size: %d", filename, fsize);
-        if (!Update.begin(fsize))
-        {
+        if (!Update.begin(fsize)) {
             ESP_LOGI(TAG, "Error: %s", Update.errorString());
             Update.printError(Serial);
         }
     }
 
-    if (Update.write(data, len) != len)
-    {
+    if (Update.write(data, len) != len) {
         ESP_LOGI(TAG, "Error: %s", Update.errorString());
         Update.printError(Serial);
     }
 
-    if (final)
-    {
-        if (!Update.end(true))
-        {
+    if (final) {
+        if (!Update.end(true)) {
             ESP_LOGI(TAG, "Error: %s", Update.errorString());
             Update.printError(Serial);
-        }
-        else
-        {
+        } else {
             ESP_LOGI(TAG, "Update Success: %u bytes Rebooting...", fsize);
             AsyncWebServerResponse *response = request->beginResponse(307);
-            response->addHeader("Refresh","10");
-            response->addHeader("Location","/");
+            response->addHeader("Refresh", "10");
+            response->addHeader("Location", "/");
             request->send(response);
         }
     }
 }
 
-void handleSetSettings(AsyncWebServerRequest *request)
-{
-    if (request->hasArg(PREFERENCES_REC_SERIAL_BAUDRATE))
-    {
+void handleSetSettings(AsyncWebServerRequest *request) {
+    if (request->hasArg(PREFERENCES_REC_SERIAL_BAUDRATE)) {
         serialBaudrate = (uint32_t)request->arg(PREFERENCES_REC_SERIAL_BAUDRATE).toInt();
         preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, serialBaudrate);
         SerialPort.updateBaudRate(serialBaudrate);
@@ -165,8 +143,7 @@ void handleSetSettings(AsyncWebServerRequest *request)
         request->send(200);
     }
 
-    if (request->hasArg(PREFERENCES_REC_DOMAIN_NAME))
-    {
+    if (request->hasArg(PREFERENCES_REC_DOMAIN_NAME)) {
         domainName = request->arg(PREFERENCES_REC_DOMAIN_NAME).c_str();
         preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domainName.c_str(), domainName.length());
         ESP_LOGI(TAG, "Domain name updated: %s", domainName.c_str());
@@ -175,8 +152,7 @@ void handleSetSettings(AsyncWebServerRequest *request)
         esp_restart();
     }
 
-    if (request->hasArg(PREFERENCES_REC_MODE))
-    {
+    if (request->hasArg(PREFERENCES_REC_MODE)) {
         mode = (uint8_t)request->arg(PREFERENCES_REC_MODE).toInt();
         preferences.putUInt(PREFERENCES_REC_MODE, mode);
         ESP_LOGI(TAG, "Mode updated: %d", mode);
@@ -186,42 +162,34 @@ void handleSetSettings(AsyncWebServerRequest *request)
     }
 }
 
-void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
-{
-    if (type == WS_EVT_CONNECT)
-    {
+void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+    if (type == WS_EVT_CONNECT) {
         ESP_LOGI(TAG, "WebSocket client connected from %s", client->remoteIP().toString().c_str());
         wsClient = client;
-    }
-    else if (type == WS_EVT_DISCONNECT)
-    {
+    } else if (type == WS_EVT_DISCONNECT) {
         ESP_LOGI(TAG, "WebSocket client disconnected from %s", client->remoteIP().toString().c_str());
         wsClient = nullptr;
     }
 }
 
-void onWiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info)
-{
+void onWiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
     ESP_LOGI(TAG, "WiFi client connected power up and disabling shutdown timer");
     WiFi.setTxPower(DEFAULT_WIFI_HIGH_PWR);
     deviceShouldShutdown = false;
 }
 
-void onWiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
-{
+void onWiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
     ESP_LOGI(TAG, "WiFi client disconnected power down");
     WiFi.setTxPower(DEFAULT_WIFI_LOW_PWR);
 }
 
-void initSerial()
-{
+void initSerial() {
     SerialPort.setRxBufferSize(512);
     SerialPort.begin(serialBaudrate, SERIAL_8N1, SERIAL_PIN_RX);
     ESP_LOGI(TAG, "Serial initialized");
 }
 
-void initBLE()
-{
+void initBLE() {
     NimBLEDevice::init(domainName);
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
@@ -269,8 +237,7 @@ void initBLE()
     ESP_LOGI(TAG, "BLE initialized");
 }
 
-void initWiFi()
-{
+void initWiFi() {
     WiFiClass::mode(WIFI_AP);
     WiFi.softAP(domainName.c_str(), password.c_str());
     WiFi.onEvent(onWiFiStationConnected, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
@@ -279,8 +246,7 @@ void initWiFi()
     ESP_LOGI(TAG, "WiFi AP initialized name: %s, password: %s", domainName.c_str(), password.c_str());
 }
 
-void initWebServer()
-{
+void initWebServer() {
     webServer.on("/update", HTTP_POST, handleUpdateEnd, handleUpdate);
 
     webServer.on("/settings", HTTP_POST, handleSetSettings);
@@ -302,7 +268,7 @@ void initWebServer()
     });
 
     webServer.on("/", [](AsyncWebServerRequest *request) {
-        request->send(200, "text/html", (const uint8_t*)data_index_html, data_index_html_len);
+        request->send(200, "text/html", (const uint8_t *)data_index_html, data_index_html_len);
     });
 
     ws.onEvent(onWsEvent);
@@ -312,65 +278,50 @@ void initWebServer()
     ESP_LOGI(TAG, "Web Server initialized at http://%s", WiFi.softAPIP().toString().c_str());
 }
 
-void initPreferences()
-{
+void initPreferences() {
     preferences.begin(PREFERENCES_NAME, false);
 
-    if (preferences.isKey(PREFERENCES_REC_SERIAL_BAUDRATE))
-    {
+    if (preferences.isKey(PREFERENCES_REC_SERIAL_BAUDRATE)) {
         serialBaudrate = preferences.getUInt(PREFERENCES_REC_SERIAL_BAUDRATE);
     }
 
-    if (!preferences.isKey(PREFERENCES_REC_DOMAIN_NAME))
-    {
+    if (!preferences.isKey(PREFERENCES_REC_DOMAIN_NAME)) {
         preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domainName.c_str(), domainName.length());
-    }
-    else
-    {
+    } else {
         char domain_name_buffer[32];
         unsigned int buffer_length = preferences.getBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name_buffer, 32);
         domainName.assign(domain_name_buffer, buffer_length);
     }
 
-    if (preferences.isKey(PREFERENCES_REC_MODE))
-    {
+    if (preferences.isKey(PREFERENCES_REC_MODE)) {
         mode = (uint8_t)preferences.getUInt(PREFERENCES_REC_MODE);
     }
 
     ESP_LOGI(TAG, "Preferences initialized");
 }
 
-void sendBleData(const uint8_t* data, size_t size)
-{
+void sendBleData(const uint8_t *data, size_t size) {
     pCharacteristicTX->setValue(data, size);
-    if (!pCharacteristicTX->notify())
-    {
+    if (!pCharacteristicTX->notify()) {
         ESP_LOGI(TAG, "Failed to ble notify");
     }
 }
 
-void sendWSData(const uint8_t* data, size_t size)
-{
-    if (wsClient->canSend())
-    {
+void sendWSData(const uint8_t *data, size_t size) {
+    if (wsClient->canSend()) {
         ws.binaryAll(data, size);
     }
 }
 
-void sendData(const uint8_t *data, size_t size)
-{
-    if (bleDeviceConnected)
-    {
+void sendData(const uint8_t *data, size_t size) {
+    if (bleDeviceConnected) {
         sendBleData(data, size);
-    }
-    else if (wsClient != nullptr)
-    {
+    } else if (wsClient != nullptr) {
         sendWSData(data, size);
     }
 }
 
-void setup()
-{
+void setup() {
 #ifdef MAIN_DEBUG
     Serial.begin(DEFAULT_SERIAL_BAUDRATE);
     esp_log_level_set("*", ESP_LOG_INFO);
@@ -387,11 +338,11 @@ void setup()
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
     ESP_LOGI(TAG, "Features included: %s %s %s %s %s",
-        (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded flash," : "",
-        (chip_info.features & CHIP_FEATURE_WIFI_BGN) ? "2.4GHz WiFi," : "",
-        (chip_info.features & CHIP_FEATURE_BLE) ? "Bluetooth LE," : "",
-        (chip_info.features & CHIP_FEATURE_BT) ? "Bluetooth Classic," : "",
-        (chip_info.features & CHIP_FEATURE_IEEE802154) ? "IEEE 802.15.4," : "");
+             (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded flash," : "",
+             (chip_info.features & CHIP_FEATURE_WIFI_BGN) ? "2.4GHz WiFi," : "",
+             (chip_info.features & CHIP_FEATURE_BLE) ? "Bluetooth LE," : "",
+             (chip_info.features & CHIP_FEATURE_BT) ? "Bluetooth Classic," : "",
+             (chip_info.features & CHIP_FEATURE_IEEE802154) ? "IEEE 802.15.4," : "");
     ESP_LOGI(TAG, "====================================");
 #else
     esp_log_level_set("*", ESP_LOG_NONE);
@@ -405,15 +356,12 @@ void setup()
     delay(500);
     initSerial();
 
-    if (mode == MODE_BLE)
-    {
+    if (mode == MODE_BLE) {
         initBLE();
 #ifdef BOARD_ESP32C3
         digitalWrite(LED_PIN, HIGH);
 #endif
-    }
-    else if (mode == MODE_WEB)
-    {
+    } else if (mode == MODE_WEB) {
         initWiFi();
         initWebServer();
 #ifdef BOARD_ESP32C3
@@ -424,24 +372,18 @@ void setup()
     startTime = millis();
 }
 
-void IRAM_ATTR loop()
-{
-    if (deviceShouldShutdown && millis() - startTime >= DEFAULT_TIMEOUT_MS)
-    {
+void IRAM_ATTR loop() {
+    if (deviceShouldShutdown && millis() - startTime >= DEFAULT_TIMEOUT_MS) {
         ESP_LOGI(TAG, "Timeout reached, going to sleep, bye bye");
         esp_deep_sleep_start();
     }
 
 #ifdef BOARD_ESP32C3
-    if (digitalRead(BOOT_PIN) == 0)
-    {
-        if (mode == MODE_BLE)
-        {
+    if (digitalRead(BOOT_PIN) == 0) {
+        if (mode == MODE_BLE) {
             preferences.putUInt(PREFERENCES_REC_MODE, MODE_WEB);
             ESP_LOGI(TAG, "Rebooting in Web mode");
-        }
-        else
-        {
+        } else {
             preferences.putUInt(PREFERENCES_REC_MODE, MODE_BLE);
             ESP_LOGI(TAG, "Rebooting in BLE mode");
         }
@@ -449,58 +391,47 @@ void IRAM_ATTR loop()
     }
 #endif
 
-    if (!bleDeviceConnected && wsClient == nullptr)
-    {
+    if (!bleDeviceConnected && wsClient == nullptr) {
         delay(20);
         return;
     }
 
     unsigned long now = millis();
-    if (nextTimeLinkStats <= now)
-    {
+    if (nextTimeLinkStats <= now) {
         ESP_LOGI(TAG, "Packet count in last period: %d", packetCount);
         nextTimeLinkStats = now + DEFAULT_BLE_LINKSTATS_PACKET_PERIOD_MS;
-        if (packetCount == 0)
-        {
+        if (packetCount == 0) {
             sendData(EMPTY_LINK_STATS_PACKET, EMPTY_LINK_STATS_PACKET_SIZE);
             ESP_LOGI(TAG, "Sending empty link stats packet");
         }
         packetCount = 0;
     }
 
-    while (SerialPort.available())
-    {
+    while (SerialPort.available()) {
         const uint8_t byte = SerialPort.read();
         if (crsfIndex == 0 &&
             byte != CRSF_ADDRESS_RADIO &&
             byte != CRSF_ADDRESS_RX &&
             byte != CRSF_ADDRESS_TX &&
             byte != CRSF_SYNC_BYTE
-        )
-        {
+        ) {
             return;
         }
 
         crsfBuffer[crsfIndex++] = byte;
-        if (crsfIndex == 2)
-        {
+        if (crsfIndex == 2) {
             const uint8_t expectedLength = crsfBuffer[1];
-            if (expectedLength > CRSF_MAX_PAYLOAD_SIZE || expectedLength < CRSF_MIN_PAYLOAD_SIZE)
-            {
+            if (expectedLength > CRSF_MAX_PAYLOAD_SIZE || expectedLength < CRSF_MIN_PAYLOAD_SIZE) {
                 ESP_LOGI(TAG, "CRSF incorrect packet size skipped length:(%d)", expectedLength);
                 crsfIndex = 0;
                 return;
             }
-        }
-        else if (crsfIndex > 2)
-        {
+        } else if (crsfIndex > 2) {
             const uint8_t expectedLength = crsfBuffer[1] + 2;
-            if (crsfIndex == expectedLength)
-            {
+            if (crsfIndex == expectedLength) {
                 const uint8_t inCrc = crsfBuffer[expectedLength - 1];
                 const uint8_t crc = crsfCrc.calc(&crsfBuffer[2], expectedLength - 3);
-                if (inCrc != crc)
-                {
+                if (inCrc != crc) {
                     memset(crsfBuffer, 0, expectedLength);
                     crsfIndex = 0;
                     ESP_LOGI(TAG, "CRSF incorrect packet crc 0x%02x != 0x%02x", inCrc, crc);
@@ -508,12 +439,9 @@ void IRAM_ATTR loop()
                 }
 
                 const uint8_t type = crsfBuffer[2];
-                if (type == CRSF_PING_PACKET_ID || type == CRSF_RC_SYNC_PACKET_ID)
-                {
+                if (type == CRSF_PING_PACKET_ID || type == CRSF_RC_SYNC_PACKET_ID) {
                     ESP_LOGI(TAG, "CRSF ping or sync packet skipped type:(0x%02x) length:(%d)", type, expectedLength);
-                }
-                else
-                {
+                } else {
                     packetCount++;
                     sendData(crsfBuffer, expectedLength);
                 }
