@@ -14,7 +14,7 @@
 #include "crc.h"
 
 // Logging
-// #define MAIN_DEBUG
+#define MAIN_DEBUG
 #define TAG "MAIN"
 
 // Hardware

@@ -380,8 +380,7 @@ void sendData(const uint8_t *data, size_t size) {
     }
 }
 
-void setup() {
-#ifdef MAIN_DEBUG
+void initLog() {
     Serial.begin(DEFAULT_SERIAL_BAUDRATE);
     Serial.setDebugOutput(true);
     uint32_t serialConnectStart = millis();
@@ -408,6 +407,11 @@ void setup() {
              (chip_info.features & CHIP_FEATURE_BT) ? "Bluetooth Classic," : "",
              (chip_info.features & CHIP_FEATURE_IEEE802154) ? "IEEE 802.15.4," : "");
     ESP_LOGI(TAG, "====================================");
+}
+
+void setup() {
+#ifdef MAIN_DEBUG
+    initLog();
 #else
     esp_log_level_set("*", ESP_LOG_NONE);
 #endif
