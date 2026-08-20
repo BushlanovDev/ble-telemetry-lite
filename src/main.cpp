@@ -16,6 +16,10 @@ std::string password = DEFAULT_PASSWORD;
 uint8_t mode = MODE_BLE;
 
 bool bleDeviceConnected = false;
+uint16_t bleActiveConnHandle = BLE_HS_CONN_HANDLE_NONE;
+uint16_t bleCurrentMtu = 23;
+bool bleMtuWarned = false;
+bool bleTxSubscribed = false;
 bool deviceShouldShutdown = true;
 
 unsigned long startTime = 0;
@@ -24,7 +28,7 @@ unsigned long packetCount = 0;
 
 AsyncWebServer webServer(DEFAULT_WEB_PORT);
 AsyncWebSocket ws("/ws");
-AsyncWebSocketClient *wsClient;
+volatile uint32_t wsClientId = 0;
 
 NimBLEAdvertising *pAdvertising;
 NimBLEServer *pServer;
@@ -42,7 +46,17 @@ NimBLECharacteristic *pCharacteristicMode;
 
 static inline bool isValidMode(uint8_t m) { return m == MODE_BLE || m == MODE_WEB; }
 static inline bool isValidBaudrate(uint32_t b) { return b >= SERIAL_BAUDRATE_MIN && b <= SERIAL_BAUDRATE_MAX; }
-static inline bool isValidDomainNameLen(size_t n) { return n > 0 && n <= DOMAIN_NAME_MAX_LENGTH; }
+static bool isValidDomainName(const uint8_t *data, size_t len) {
+    if (len == 0 || len > DOMAIN_NAME_MAX_LENGTH) {
+        return false;
+    }
+    for (size_t i = 0; i < len; i++) {
+        if (data[i] < 0x20 || data[i] > 0x7E) {
+            return false;
+        }
+    }
+    return true;
+}
 
 volatile bool pendingRestart = false;
 volatile unsigned long restartRequestTime = 0;
@@ -55,22 +69,32 @@ static inline void requestRestart() {
 
 class ServerCallbacks final : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override {
+        bleActiveConnHandle = connInfo.getConnHandle();
+        bleCurrentMtu = 23;
+        bleMtuWarned = false;
+        bleTxSubscribed = false;
         bleDeviceConnected = true;
         deviceShouldShutdown = false;
-        pServer->updateConnParams(connInfo.getConnHandle(), 6, 6, 0, 500);
-        NimBLEDevice::setPower(DEFAULT_BLE_HIGH_PWR);
+        NimBLEDevice::setPower(DEFAULT_BLE_DBM_HIGH_PWR);
         pendingFlush = true;
         ESP_LOGI(TAG, "BLEServer onConnect power up and disable shutdown timer");
     }
 
     void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override {
-        bleDeviceConnected = false;
-        NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR);
-        NimBLEDevice::startAdvertising();
+        if (connInfo.getConnHandle() == bleActiveConnHandle) {
+            bleActiveConnHandle = BLE_HS_CONN_HANDLE_NONE;
+            bleTxSubscribed = false;
+        }
+        bleDeviceConnected = (pServer->getConnectedCount() > 0);
+        if (!bleDeviceConnected) {
+            NimBLEDevice::setPower(DEFAULT_BLE_DBM_LOW_PWR);
+            NimBLEDevice::startAdvertising();
+        }
         ESP_LOGI(TAG, "BLEServer onDisconnect power down");
     }
 
     void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override {
+        bleCurrentMtu = MTU;
         if (MTU < CRSF_MAX_PACKET_SIZE + 3) {
             ESP_LOGW(TAG, "Negotiated MTU %u < %u (conn %u); telemetry may be truncated", MTU, (unsigned)(CRSF_MAX_PACKET_SIZE + 3), connInfo.getConnHandle());
         } else {
@@ -78,6 +102,19 @@ class ServerCallbacks final : public NimBLEServerCallbacks {
         }
     }
 };
+
+class TXCharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
+    void onSubscribe(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo, uint16_t subValue) override {
+        bleTxSubscribed = (subValue != 0);
+        if (subValue != 0) {
+            // Discovery is done by now; only then request the fast connection interval needed for telemetry.
+            NimBLEDevice::getServer()->updateConnParams(connInfo.getConnHandle(), 6, 6, 0, 500);
+        }
+        ESP_LOGI(TAG, "FFF6 notifications %s by connection %u", subValue ? "enabled" : "disabled", connInfo.getConnHandle());
+    }
+};
+
+static TXCharacteristicCallbacks txCallbacks;
 
 class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
@@ -98,8 +135,8 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
             ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serialBaudrate);
         } else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID()) {
             const auto v = pCharacteristic->getValue();
-            if (!isValidDomainNameLen(v.size())) {
-                ESP_LOGW(TAG, "Rejected domain name length: %u", (unsigned)v.size());
+            if (!isValidDomainName(v.data(), v.size())) {
+                ESP_LOGW(TAG, "Rejected invalid domain name (length %u)", (unsigned)v.size());
                 return;
             }
             domainName.assign(reinterpret_cast<const char *>(v.data()), v.size());
@@ -185,8 +222,8 @@ void handleSetSettings(AsyncWebServerRequest *request) {
 
     if (request->hasArg(PREFERENCES_REC_DOMAIN_NAME)) {
         const String dn = request->arg(PREFERENCES_REC_DOMAIN_NAME);
-        if (!isValidDomainNameLen(dn.length())) {
-            request->send(400, "text/plain", "Invalid domain name length");
+        if (!isValidDomainName(reinterpret_cast<const uint8_t *>(dn.c_str()), dn.length())) {
+            request->send(400, "text/plain", "Invalid domain name");
             return;
         }
         domainName.assign(dn.c_str(), dn.length());
@@ -213,12 +250,27 @@ void handleSetSettings(AsyncWebServerRequest *request) {
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
     if (type == WS_EVT_CONNECT) {
         ESP_LOGI(TAG, "WebSocket client connected from %s", client->remoteIP().toString().c_str());
-        wsClient = client;
+        const uint32_t prevId = wsClientId;
+        if (prevId != 0) {
+            ESP_LOGI(TAG, "Kicking previous WebSocket client id %u", (unsigned)prevId);
+            server->close(prevId);
+        }
+        wsClientId = client->id();
         pendingFlush = true;
     } else if (type == WS_EVT_DISCONNECT) {
         ESP_LOGI(TAG, "WebSocket client disconnected from %s", client->remoteIP().toString().c_str());
-        wsClient = nullptr;
+        if (client->id() == wsClientId) {
+            wsClientId = 0;
+        }
     }
+}
+
+void onWiFiAPStarted(WiFiEvent_t event, WiFiEventInfo_t info) {
+    if (!WiFi.setTxPower(DEFAULT_WIFI_LOW_PWR)) {
+        ESP_LOGE(TAG, "Failed to set WiFi AP TX power to low");
+        return;
+    }
+    ESP_LOGI(TAG, "WiFi AP started, TX power set to low");
 }
 
 void onWiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -253,6 +305,7 @@ void initBLE() {
 
     NimBLEService *pServiceExchange = pServer->createService("FFF0");
     pCharacteristicTX = pServiceExchange->createCharacteristic("FFF6", NIMBLE_PROPERTY::NOTIFY);
+    pCharacteristicTX->setCallbacks(&txCallbacks);
     pCharacteristicRX = pServiceExchange->createCharacteristic("FFF7", NIMBLE_PROPERTY::WRITE_NR);
     pCharacteristicRX->setCallbacks(&chrCallbacks);
 
@@ -273,20 +326,22 @@ void initBLE() {
     pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(pServiceExchange->getUUID());
     pAdvertising->addServiceUUID(pServiceConfig->getUUID());
-    pAdvertising->setName(domainName);
+    if (!pAdvertising->setName(domainName)) {
+        ESP_LOGE(TAG, "Failed to set advertising name (length %u)", (unsigned)domainName.size());
+    }
     pAdvertising->start();
 
     NimBLEDevice::setMTU(CRSF_MAX_PACKET_SIZE + 3);
-    NimBLEDevice::setPower(DEFAULT_BLE_LOW_PWR);
+    NimBLEDevice::setPower(DEFAULT_BLE_DBM_LOW_PWR);
 
     ESP_LOGI(TAG, "BLE initialized");
 }
 
 void initWiFi() {
-    WiFiClass::mode(WIFI_AP);
+    WiFi.onEvent(onWiFiAPStarted, ARDUINO_EVENT_WIFI_AP_START);
     WiFi.onEvent(onWiFiStationConnected, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
     WiFi.onEvent(onWiFiStationDisconnected, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
-    WiFi.setTxPower(DEFAULT_WIFI_LOW_PWR);
+    WiFiClass::mode(WIFI_AP);
     if (!WiFi.softAP(domainName.c_str(), password.c_str())) {
         ESP_LOGE(TAG, "WiFi.softAP failed (domain name length: %u)", (unsigned)domainName.size());
     }
@@ -342,8 +397,13 @@ void initPreferences() {
     } else {
         char domain_name_buffer[DOMAIN_NAME_MAX_LENGTH + 1];
         const unsigned int buffer_length = preferences.getBytes(PREFERENCES_REC_DOMAIN_NAME, domain_name_buffer, DOMAIN_NAME_MAX_LENGTH + 1);
-        const unsigned int clamped_length = (buffer_length > DOMAIN_NAME_MAX_LENGTH) ? DOMAIN_NAME_MAX_LENGTH : buffer_length;
-        domainName.assign(domain_name_buffer, clamped_length);
+        if (!isValidDomainName(reinterpret_cast<const uint8_t *>(domain_name_buffer), buffer_length)) {
+            ESP_LOGW(TAG, "Stored domain name invalid (length %u), falling back to default", buffer_length);
+            domainName = DEFAULT_DOMAIN_NAME;
+            preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domainName.c_str(), domainName.length());
+        } else {
+            domainName.assign(domain_name_buffer, buffer_length);
+        }
     }
 
     if (preferences.isKey(PREFERENCES_REC_MODE)) {
@@ -360,14 +420,26 @@ void initPreferences() {
 }
 
 void sendBleData(const uint8_t *data, size_t size) {
-    pCharacteristicTX->setValue(data, size);
-    if (!pCharacteristicTX->notify()) {
-        ESP_LOGI(TAG, "Failed to ble notify");
+    if (!bleTxSubscribed) {
+        return;
+    }
+    if (size > bleCurrentMtu - 3) {
+        if (!bleMtuWarned) {
+            bleMtuWarned = true;
+            ESP_LOGW(TAG, "Frame of %u bytes exceeds negotiated MTU %u, dropping long frames this connection", (unsigned)size, (unsigned)bleCurrentMtu);
+        }
+        return;
+    }
+    const bool ok = (bleActiveConnHandle != BLE_HS_CONN_HANDLE_NONE)
+                        ? pCharacteristicTX->notify(data, size, bleActiveConnHandle)
+                        : pCharacteristicTX->notify(data, size);
+    if (!ok) {
+        ESP_LOGW(TAG, "Failed to ble notify");
     }
 }
 
 void sendWSData(const uint8_t *data, size_t size) {
-    if (wsClient->canSend()) {
+    if (ws.availableForWrite(wsClientId)) {
         ws.binaryAll(data, size);
     }
 }
@@ -375,7 +447,7 @@ void sendWSData(const uint8_t *data, size_t size) {
 void sendData(const uint8_t *data, size_t size) {
     if (bleDeviceConnected) {
         sendBleData(data, size);
-    } else if (wsClient != nullptr) {
+    } else if (wsClientId != 0) {
         sendWSData(data, size);
     }
 }
@@ -441,6 +513,9 @@ void setup() {
 }
 
 void IRAM_ATTR loop() {
+    if (mode == MODE_WEB) {
+        ws.cleanupClients();
+    }
     if (pendingRestart && millis() - restartRequestTime >= RESTART_DELAY_MS) {
         esp_restart();
     }
@@ -491,7 +566,7 @@ void IRAM_ATTR loop() {
     }
 #endif
 
-    if (!bleDeviceConnected && wsClient == nullptr) {
+    if (!bleDeviceConnected && wsClientId == 0) {
         delay(20);
         return;
     }
