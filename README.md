@@ -40,7 +40,11 @@ Connection to internal TX on a Jumper T20 transmitter example
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/esp32-c3-supermini_to_jumper-t20.jpg?raw=true" width="50%" alt="Connection to Jumper T20 internal TX" title="Connection to Jumper T20 internal TX" />
 
-## Flashing and Configuration
+## Flashing
+
+Download the archive matching your board from [Releases](https://github.com/BushlanovDev/ble-telemetry-lite/releases) and unpack it.
+It contains `bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin`, and `merged.bin` (all four files as a single image).
+The bootloaders differ between boards — use the archive for your chip only.
 
 ### Firmware via web interface
 
@@ -56,6 +60,37 @@ The web interface is accessible at [http://192.168.4.1](http://192.168.4.1).
 Download [Flash Download Tool](https://docs.espressif.com/projects/esp-test-tools/en/latest/esp32c3/production_stage/tools/flash_download_tool.html), set the settings as shown in the screenshot and don't forget to specify your COM port.
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/flasher-tool.png?raw=true" alt="Flash Download Tool" />
+
+### Flashing via esptool
+
+**Option 1: browser, nothing to install**
+
+1. Open [esp.huhn.me](https://esp.huhn.me/) in Chrome, Edge, or Opera.
+2. Select `merged.bin`, connect the board via USB, pick the serial port, and click **Connect**.
+3. Click **Erase** (full chip erase), then **Program**.
+
+**Option 2: esptool, single file**
+
+```bash
+pip install esptool
+esptool --chip esp32c3 write_flash 0x0 merged.bin
+```
+
+**Option 3: esptool, separate files**
+
+```bash
+esptool --chip esp32c3 write_flash 0x0 bootloader.bin 0x8000 partitions.bin 0xE000 boot_app0.bin 0x10000 firmware.bin
+```
+
+For the S3 board use `--chip esp32s3` instead of `--chip esp32c3`. In esptool 4.x and older the command is called `esptool.py`.
+
+If the board was running other firmware before, erase the flash first:
+
+```bash
+esptool --chip esp32c3 erase_flash
+```
+
+Flashing `merged.bin` (or erasing the flash) resets device settings (mode, baudrate, name) to factory defaults - this is normal when flashing for the first time.
 
 ## License
 
