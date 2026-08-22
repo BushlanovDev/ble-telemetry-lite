@@ -180,26 +180,34 @@ void handleUpdateEnd(AsyncWebServerRequest *request) {
 void handleUpdate(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
     size_t fsize = UPDATE_SIZE_UNKNOWN;
     if (request->hasArg("size")) {
-        fsize = (size_t)request->arg("size").toInt();
-    } else {
-        fsize = request->contentLength();
+        const long s = request->arg("size").toInt();
+        if (s > 0) {
+            fsize = (size_t)s;
+        }
     }
 
     if (!index) {
-        ESP_LOGI(TAG, "Receiving Update: %s, Size: %d", filename.c_str(), fsize);
-        if (fsize == UPDATE_SIZE_UNKNOWN || !Update.begin(fsize)) {
-            ESP_LOGI(TAG, "Error: %s", fsize == UPDATE_SIZE_UNKNOWN ? "unknown update size" : Update.errorString());
+        request->onDisconnect([]() {
+            if (Update.isRunning()) {
+                Update.abort();
+            }
+        });
+        ESP_LOGI(TAG, "Receiving Update: %s, Size: %s", filename.c_str(),
+                 fsize == UPDATE_SIZE_UNKNOWN ? "unknown" : String(fsize).c_str());
+        if (!Update.begin(fsize)) {
+            ESP_LOGI(TAG, "Error: %s", Update.errorString());
             Update.printError(Serial);
         }
     }
 
-    if (Update.write(data, len) != len) {
+    if (Update.isRunning() && Update.write(data, len) != len) {
         ESP_LOGI(TAG, "Error: %s", Update.errorString());
         Update.printError(Serial);
     }
 
-    if (final) {
-        if (!Update.end()) {
+    if (final && Update.isRunning()) {
+        const bool lenientEnd = (fsize == UPDATE_SIZE_UNKNOWN) && (Update.progress() > 0);
+        if (!Update.end(lenientEnd)) {
             ESP_LOGI(TAG, "Error: %s", Update.errorString());
             Update.printError(Serial);
         }
@@ -490,7 +498,7 @@ void setup() {
 
 #ifdef BOARD_ESP32C3
     pinMode(LED_PIN, OUTPUT);
-    pinMode(BOOT_PIN, INPUT);
+    pinMode(BOOT_PIN, INPUT_PULLUP);
 #endif
     initPreferences();
     delay(500);
