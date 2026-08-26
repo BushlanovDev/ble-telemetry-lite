@@ -1,137 +1,251 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>BLE Telemetry Lite</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        * {margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif;}
-        body {width: 100%; max-width: 480px; margin: auto; background: #121212; color: white; padding: 20px;}
-        @media (max-width: 600px) { body {max-width: 100%; padding: 10px;} }
-        h2 {color: #00ff99; text-align: center; margin: 20px 0;}
-        table {width: 100%; border-collapse: collapse; background: #1e1e1e;}
-        th, td {border: 1px solid #333; padding: 10px; text-align: left;}
-        .setting {display: flex; gap: 5px; margin-bottom: 10px;}
-        input, button, select {padding: 8px; border: none; outline: none;}
-        input, select {flex: 1; background: #222; color: white; width: 100%;}
-        select {text-overflow: ellipsis; white-space: nowrap; overflow: hidden;}
-        button {background: #00ff99; color: black; cursor: pointer;}
-        button:hover {opacity: 0.8;}
-        form {text-align: center; margin-top: 10px;}
-        #prg {width: 0; height: 20px; background: #00ff99; text-align: center; display: none;}
-        #device-info {font-weight: bold;}
-        .update-hint {color: #999; max-width: 500px;}
-        #update-status.ok {color: #66bb6a;}
-        #update-status.err {color: #ef5350;}
-        .tabs {display: flex; justify-content: space-around; margin-bottom: 10px;}
-        .tab {padding: 10px; cursor: pointer; background: #222; color: white; border-radius: 5px;}
-        .tab.active {background: #00ff99; color: black;}
-        .tab-content {display: none;}
-        .tab-content.active {display: block;}
-        textarea {width: 100%; height: 200px; background: #222; color: white; margin-top: 10px;}
-    </style>
+<meta charset="UTF-8">
+<title>BLE Telemetry Lite</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:100%;max-width:480px;margin:auto;background:#121212;color:#e8e8e8;font:14px system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-text-size-adjust:100%}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+header{background:#171717;border-bottom:1px solid #242424;position:sticky;top:0;z-index:2}
+.hd{padding:14px 14px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.hd h1{font-size:15px;font-weight:600;color:#e8e8e8}
+.hd .sub{font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#6f6f6f;margin-top:3px}
+.pill{display:none;align-items:center;gap:6px;padding:5px 9px;border-radius:99px;background:rgba(0,255,153,.12);font:600 11px ui-monospace,Menlo,monospace;color:#00ff99;white-space:nowrap}
+.pill.on{display:flex}
+.dot{width:6px;height:6px;border-radius:99px;background:#00ff99}
+.tabs{display:flex}
+.tab{flex:1;text-align:center;padding:10px 0;font-size:13px;font-weight:500;color:#8a8a8a;background:none;border:0;cursor:pointer;box-shadow:inset 0 -2px 0 transparent}
+.tab:hover{color:#e8e8e8}
+.tab.active{color:#00ff99;font-weight:600;box-shadow:inset 0 -2px 0 #00ff99}
+main{padding:16px 14px 24px;display:flex;flex-direction:column;gap:12px}
+.tab-content{display:none;flex-direction:column;gap:12px}
+.tab-content.active{display:flex}
+.card{background:#1c1c1c;border:1px solid #272727;border-radius:12px}
+.card.pad{padding:13px}
+.card.list{overflow:hidden}
+.cap{font-size:10px;letter-spacing:.1em;color:#6f6f6f;text-transform:uppercase}
+.card .cap{padding:10px 12px;border-bottom:1px solid #242424}
+.flabel{font-size:12px;color:#8a8a8a;margin-bottom:9px}
+.hint{font-size:11px;line-height:1.45;color:#5c5c5c;margin-top:8px}
+.row{display:flex;gap:8px;align-items:center}
+input[type=text],select{flex:1;min-width:0;padding:9px 11px;background:#121212;border:1px solid #2e2e2e;border-radius:8px;color:#e8e8e8;font:13px ui-monospace,Menlo,monospace;outline:none;-webkit-appearance:none;appearance:none}
+input[type=text]:focus,select:focus{border-color:#00ff99}
+select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+.save{padding:9px 13px;border:0;border-radius:8px;background:rgba(0,255,153,.12);color:#00ff99;font:600 12px system-ui,sans-serif;cursor:pointer}
+.save:hover{background:#00ff99;color:#08160f}
+.seg{flex:1;display:flex;gap:4px;padding:3px;background:#121212;border:1px solid #2e2e2e;border-radius:8px}
+.seg button{flex:1;padding:7px 0;border:0;border-radius:6px;background:none;color:#8a8a8a;font:600 12px system-ui,sans-serif;cursor:pointer}
+.seg button:hover{color:#e8e8e8}
+.seg button.on{background:#00ff99;color:#08160f}
+.srow{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid #232323}
+.srow:first-child{border-top:0}
+.srow .k{font-size:13px;color:#9a9a9a}
+.srow .v{font:13px ui-monospace,Menlo,monospace;color:#e8e8e8;text-align:right;white-space:nowrap}
+.lhd{display:flex;justify-content:space-between;align-items:center;padding:0 2px}
+.lhd .n{font:11px ui-monospace,Menlo,monospace;color:#5c5c5c}
+.btn{padding:11px 0;border:1px solid #333;border-radius:9px;background:none;color:#e8e8e8;font:600 13px system-ui,sans-serif;cursor:pointer;width:100%}
+.btn:hover{border-color:#666}
+.btn.ok:hover{border-color:#00ff99;color:#00ff99}
+.btn.danger:hover{border-color:#ef5350;color:#ef5350}
+.btn.primary{border:0;background:#00ff99;color:#08160f}
+.btn.primary:hover{opacity:.85}
+.btn:disabled{opacity:.45;cursor:default}
+#file{display:none}
+#file-zone{cursor:pointer;border-style:dashed;border-color:#3a3a3a}
+#file-zone:hover{border-color:#00ff99}
+.fname{display:flex;justify-content:center;align-items:baseline;gap:10px}
+.fname b{font-size:13px;font-weight:600;color:#e8e8e8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fname span{font:11px ui-monospace,Menlo,monospace;color:#00ff99;white-space:nowrap}
+.fsub{margin-top:6px;text-align:center;font-size:13px;color:#5c5c5c}
+.bar{height:6px;border-radius:99px;background:#121212;overflow:hidden;margin-top:12px;display:none}
+.bar i{display:block;width:0;height:100%;background:#00ff99;transition:width .2s}
+.pmeta{display:none;justify-content:space-between;font:11px ui-monospace,Menlo,monospace;color:#8a8a8a;margin-top:8px}
+.note{display:flex;gap:9px;padding:11px 12px;border-radius:10px;font-size:12px;line-height:1.5;background:rgba(0,255,153,.07);border:1px solid rgba(0,255,153,.2);color:#9fd8bd}
+.note .dot{margin-top:5px;flex:none}
+.note.err{background:rgba(239,83,80,.08);border-color:rgba(239,83,80,.28);color:#f0a7a5}
+.note.err .dot{background:#ef5350}
+#update-status{display:none}
+#update-status.show{display:flex}
+#settings-status{display:none}
+#settings-status.show{display:flex}
+.empty{padding:22px 12px;text-align:center;font-size:13px;color:#5c5c5c}
+</style>
 </head>
 <body>
-<div class="tabs">
-    <div class="tab active" onclick="showTab('settings')">Settings</div>
-    <div class="tab" onclick="showTab('update')">Update</div>
-    <div class="tab" onclick="showTab('telemetry')">Telemetry</div>
-</div>
-<div id="settings" class="tab-content active">
-    <h2>Settings</h2>
-    <table>
-        <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
-        <tbody id="settings-table"></tbody>
-    </table>
-    <br>
-    <div id="settings-inputs">
-        <label>Name of Bluetooth device and Wi-Fi hotspot</label>
-        <div class="setting"><input id="domain_name" value="" maxlength="20"><button onclick='updateSetting("domain_name")'>Save</button></div>
-        <label>Module connection speed</label>
-        <div class="setting">
-            <select id="serial_baudrate">
-                <option value="57600">57k EdgeTX versions earlier than 2.10, via Serial AUX (except TX16)</option>
-                <option value="115200">115k EdgeTX versions 2.10 and later, via Serial AUX + all EdgeTX versions with TX16</option>
-                <option value="400000">400k direct connection to internal ELRS/TBS module</option>
-                <option value="921600">921k direct connection to internal ELRS/TBS module</option>
-                <option value="1870000">1.87M direct connection to internal ELRS/TBS module</option>
-                <option value="3750000">3.75M direct connection to internal module ELRS/TBS</option>
-                <option value="5250000">5.25M direct connection to the internal ELRS/TBS module</option>
-            </select>
-            <button onclick='updateSetting("serial_baudrate")'>Save</button>
+<header>
+    <div class="hd">
+        <div>
+            <h1 id="dev-name">BLE Telemetry Lite</h1>
+            <div class="sub" id="dev-sub">—</div>
         </div>
-        <label>Module operating mode</label>
-        <div class="setting">
-            <select id="mode">
-                <option value="0">BLE</option>
-                <option value="1">Wi-Fi</option>
-            </select>
-            <button onclick='updateSetting("mode")'>Save</button>
-        </div>
+        <div class="pill" id="live-pill"><span class="dot"></span>live</div>
     </div>
+    <div class="tabs">
+        <button class="tab active" onclick="showTab('telemetry')">Telemetry</button>
+        <button class="tab" onclick="showTab('settings')">Settings</button>
+        <button class="tab" onclick="showTab('update')">Update</button>
+    </div>
+</header>
+<main>
+<div id="telemetry" class="tab-content active">
+    <div class="lhd"><span class="cap">Sensors</span><span class="n" id="sensor-count">0</span></div>
+    <div class="card list" id="telemetry-card">
+        <div class="empty" id="telemetry-empty">Not connected</div>
+        <div id="telemetry-list"></div>
+    </div>
+    <button class="btn ok" id="ws-btn" onclick="toggleWebSocket()">Connect</button>
+</div>
+<div id="settings" class="tab-content">
+    <div class="card pad">
+        <div class="flabel">Name of Bluetooth device and Wi-Fi hotspot</div>
+        <div class="row">
+            <input type="text" id="domain_name" value="" maxlength="20">
+            <button class="save" onclick='updateSetting("domain_name")'>Save</button>
+        </div>
+        <div class="hint">Up to 20 characters.</div>
+    </div>
+    <div class="card pad">
+        <div class="flabel">Module connection speed</div>
+        <div class="row">
+            <select id="serial_baudrate" onchange="showBaudHint()">
+                <option value="57600">57k</option>
+                <option value="115200">115k</option>
+                <option value="400000">400k</option>
+                <option value="921600">921k</option>
+                <option value="1870000">1.87M</option>
+                <option value="3750000">3.75M</option>
+                <option value="5250000">5.25M</option>
+            </select>
+            <button class="save" onclick='updateSetting("serial_baudrate")'>Save</button>
+        </div>
+        <div class="hint" id="baud-hint"></div>
+    </div>
+    <div class="card pad">
+        <div class="flabel">Module operating mode</div>
+        <div class="row">
+            <div class="seg">
+                <button type="button" id="mode-0" onclick="setMode('0')">BLE</button>
+                <button type="button" id="mode-1" onclick="setMode('1')">Wi-Fi</button>
+            </div>
+            <button class="save" onclick='updateSetting("mode")'>Save</button>
+        </div>
+        <input type="hidden" id="mode" value="0">
+    </div>
+    <div class="note" id="settings-status"><span class="dot"></span><span id="settings-msg"></span></div>
 </div>
 <div id="update" class="tab-content">
-    <h2>Firmware Update</h2>
-    <p id="device-info"></p>
-    <p class="update-hint">
-        Upload <b>firmware.bin</b> from the release ZIP matching your chip
-        (for this device: <b><span id="zip-prefix">esp32XX</span>-supermini-&lt;version&gt;.zip</b>).
-    </p>
     <form id="upload-form">
-        <div class="setting">
-            <input type="file" id="file" name="update" accept=".bin" placeholder="firmware.bin">
-            <button type="submit" id="update-btn">Update</button>
+        <div class="card pad" id="file-zone" onclick="document.getElementById('file').click()">
+            <div class="fname"><b id="file-name">No file selected</b><span id="file-size"></span></div>
+            <div class="fsub">Choose firmware.bin file</div>
+            <div class="bar" id="prg"><i></i></div>
+            <div class="pmeta" id="prg-meta"><span>uploading</span><span id="prg-pct" style="color:#00ff99">0%</span></div>
         </div>
+        <input type="file" id="file" name="update" accept=".bin">
+        <button class="btn" type="submit" id="update-btn" disabled style="margin-top:12px">Update</button>
     </form>
-    <br>
-    <div id="prg"></div>
-    <div id="update-status"></div>
+    <div class="note" id="update-status"><span class="dot"></span><span id="update-msg"></span></div>
 </div>
-<div id="telemetry" class="tab-content">
-    <h2>Telemetry</h2>
-    <table>
-        <thead><tr><th>Sensor</th><th>Value</th></tr></thead>
-        <tbody id="telemetry-table"></tbody>
-    </table>
-    <br>
-    <button id="ws-btn" onclick="toggleWebSocket()">Connect</button>
-</div>
+</main>
 <script>
+    let BAUD_HINTS = {
+        '57600': 'EdgeTX versions earlier than 2.10, via Serial AUX (except TX16)',
+        '115200': 'EdgeTX versions 2.10 and later, via Serial AUX + all EdgeTX versions with TX16',
+        '400000': 'Direct connection to internal ELRS/TBS module',
+        '921600': 'Direct connection to internal ELRS/TBS module',
+        '1870000': 'Direct connection to internal ELRS/TBS module',
+        '3750000': 'Direct connection to internal ELRS/TBS module',
+        '5250000': 'Direct connection to the internal ELRS/TBS module'
+    };
     function showTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
         document.getElementById(tabId).classList.add('active');
         document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
+        document.getElementById('live-pill').classList.toggle('on', tabId === 'telemetry' && socket && socket.readyState === WebSocket.OPEN);
+    }
+    function showBaudHint() {
+        document.getElementById('baud-hint').textContent = BAUD_HINTS[document.getElementById('serial_baudrate').value] || '';
+    }
+    function setMode(v) {
+        document.getElementById('mode').value = v;
+        document.getElementById('mode-0').classList.toggle('on', v === '0');
+        document.getElementById('mode-1').classList.toggle('on', v === '1');
     }
     let device = null;
     document.addEventListener('DOMContentLoaded', async () => {
-        let res = await fetch('/settings');
-        let data = await res.json();
-        device = data;
-        let tableBody = document.querySelector('#settings-table');
-        ['vendor', 'model', 'firmware'].forEach(k => data[k] && (tableBody.innerHTML += `<tr><td>${k}</td><td>${data[k]}</td></tr>`));
-        ['domain_name', 'serial_baudrate', 'mode'].forEach(k => {
-            if (data[k]) document.getElementById(k).value = data[k];
-        });
-        document.getElementById('device-info').textContent =
-            'Device: ' + (data.chip || 'unknown chip') + ', firmware ' + (data.firmware || '?');
-        const zipPrefix = {5: 'esp32c3', 9: 'esp32s3'}[data.chip_id];
-        if (zipPrefix) document.getElementById('zip-prefix').textContent = zipPrefix;
+        setMode('0');
+        showBaudHint();
+        try {
+            let res = await fetch('/settings');
+            let data = await res.json();
+            device = data;
+            if (data.model) document.getElementById('dev-name').textContent = data.model;
+            document.getElementById('dev-sub').textContent =
+                'v' + (data.firmware || '?') + ' \u00b7 ' + (data.chip || 'unknown chip');
+            ['domain_name', 'serial_baudrate'].forEach(k => {
+                if (data[k]) document.getElementById(k).value = data[k];
+            });
+            if (data.mode !== undefined && data.mode !== null) setMode(String(data.mode));
+            showBaudHint();
+        } catch (err) {
+            document.getElementById('dev-sub').textContent = 'settings unavailable';
+        }
     });
     function updateSetting(k) {
-        fetch(`/settings?${k}=` + encodeURIComponent(document.getElementById(k).value), {method: 'POST'});
+        let v = document.getElementById(k).value;
+        fetch(`/settings?${k}=` + encodeURIComponent(v), {method: 'POST'}).then(res => {
+            if (!res.ok) {
+                res.text().then(t => setSaveStatus('Save failed: ' + (t || ('HTTP ' + res.status)), false));
+                return;
+            }
+            if (k === 'domain_name') {
+                setSaveStatus('Saved. Rebooting — the hotspot name is now "' + v + '", reconnect Wi-Fi.', true);
+            } else if (k === 'mode' && v === '0') {
+                setSaveStatus('Saved. Rebooting — in BLE mode the web UI goes offline.', true);
+            } else if (k === 'mode') {
+                setSaveStatus('Saved. Rebooting — reconnect in a few seconds.', true);
+            } else {
+                setSaveStatus('Saved.', true);
+            }
+        }).catch(() => setSaveStatus('Save failed: device unreachable.', false));
+    }
+    function setSaveStatus(text, ok) {
+        let el = document.getElementById('settings-status');
+        document.getElementById('settings-msg').textContent = text;
+        el.className = 'note' + (text ? ' show' : '') + (ok ? '' : ' err');
     }
     function setStatus(text, ok) {
         let el = document.getElementById('update-status');
-        el.textContent = text;
-        el.className = text ? (ok ? 'ok' : 'err') : '';
+        document.getElementById('update-msg').textContent = text;
+        el.className = 'note' + (text ? ' show' : '') + (ok ? '' : ' err');
     }
     function chipName(id) {
         return {0: 'ESP32', 2: 'ESP32-S2', 5: 'ESP32-C3', 9: 'ESP32-S3'}[id] || ('chip id ' + id);
     }
+    function fmtSize(b) {
+        return b > 1048576 ? (b / 1048576).toFixed(2) + ' MB' : Math.round(b / 1024) + ' KB';
+    }
+    function setUpdateReady(ready) {
+        let btn = document.getElementById('update-btn');
+        btn.disabled = !ready;
+        btn.className = ready ? 'btn primary' : 'btn';
+    }
+    document.getElementById('file').addEventListener('change', e => {
+        let f = e.target.files[0];
+        document.getElementById('file-name').textContent = f ? f.name : 'No file selected';
+        document.getElementById('file-size').textContent = f ? fmtSize(f.size) : '';
+        setUpdateReady(!!f);
+        setStatus('', true);
+    });
     document.getElementById('upload-form').addEventListener('submit', async e => {
         e.preventDefault();
         let prg = document.getElementById('prg');
+        let bar = prg.firstElementChild;
+        let meta = document.getElementById('prg-meta');
+        let pct = document.getElementById('prg-pct');
         let updateBtn = document.getElementById('update-btn');
         let file = document.getElementById('file').files[0];
         if (!file) {
@@ -140,50 +254,52 @@
         }
         updateBtn.disabled = true;
         prg.style.display = 'none';
+        meta.style.display = 'none';
         setStatus('', true);
         try {
             let hdr = new Uint8Array(await file.slice(0, 14).arrayBuffer());
             if (hdr.length < 14) {
                 setStatus('File is too small to be a firmware image.', false);
-                updateBtn.disabled = false;
+                setUpdateReady(false);
                 return;
             }
             let imgChip = hdr[12] | (hdr[13] << 8);
             if (hdr[0] !== 0xE9) {
                 setStatus('Not a firmware image (bad magic byte). Select firmware.bin from the release ZIP.', false);
-                updateBtn.disabled = false;
+                setUpdateReady(false);
                 return;
             }
             if (device && imgChip !== device.chip_id) {
                 setStatus('This file is for ' + chipName(imgChip) + ', this device is ' + chipName(device.chip_id) + '.', false);
-                updateBtn.disabled = false;
+                setUpdateReady(false);
                 return;
             }
         } catch (err) {
             // local read failed - let the server-side check decide
         }
-        prg.style.width = '0%';
-        prg.textContent = '0%';
+        bar.style.width = '0%';
+        pct.textContent = '0%';
         prg.style.display = 'block';
+        meta.style.display = 'flex';
         let req = new XMLHttpRequest();
         req.open('POST', '/update?size=' + file.size);
         req.upload.onprogress = p => {
             if (p.lengthComputable) {
                 let percent = Math.round((p.loaded / p.total) * 100) + '%';
-                prg.textContent = percent;
-                prg.style.width = percent;
+                pct.textContent = percent;
+                bar.style.width = percent;
             }
         };
         req.onload = () => {
             if (req.status >= 400) {
-                updateBtn.disabled = false;
+                setUpdateReady(true);
                 setStatus('Update failed: ' + (req.responseText || ('HTTP ' + req.status)), false);
             } else {
                 setStatus('Update received. Rebooting... reconnect in ~10 seconds.', true);
             }
         };
         req.onerror = () => {
-            updateBtn.disabled = false;
+            setUpdateReady(true);
             setStatus('Network error during upload.', false);
         };
         req.send(new FormData(e.target));
@@ -191,13 +307,22 @@
     let socket = null;
     function toggleWebSocket() {
         let btn = document.getElementById("ws-btn");
+        let pill = document.getElementById('live-pill');
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.close();
         } else {
             socket = new WebSocket("ws://" + window.location.hostname + "/ws");
             socket.binaryType = "arraybuffer";
-            socket.onopen = () => btn.textContent = "Disconnect";
-            socket.onclose = () => btn.textContent = "Connect";
+            socket.onopen = () => {
+                btn.textContent = "Disconnect";
+                btn.className = 'btn danger';
+                pill.classList.add('on');
+            };
+            socket.onclose = () => {
+                btn.textContent = "Connect";
+                btn.className = 'btn ok';
+                pill.classList.remove('on');
+            };
             socket.onmessage = (e) => {
                 if (e.data instanceof ArrayBuffer) {
                     let bytes = new Uint8Array(e.data);
@@ -285,14 +410,20 @@
         }
     }
     function addRow(sensorName, value) {
-        let existingRow = document.querySelector(`#telemetry-table tr[data-sensor="${sensorName}"]`);
+        let list = document.getElementById('telemetry-list');
+        let existingRow = list.querySelector(`div[data-sensor="${sensorName}"]`);
         if (existingRow) {
             existingRow.children[1].textContent = value;
         } else {
-            let row = document.createElement("tr");
+            let row = document.createElement("div");
+            row.className = 'srow';
             row.setAttribute("data-sensor", sensorName);
-            row.innerHTML = `<td>${sensorName}</td><td>${value}</td>`;
-            document.getElementById('telemetry-table').appendChild(row);
+            row.innerHTML = `<span class="k"></span><span class="v"></span>`;
+            row.children[0].textContent = sensorName;
+            row.children[1].textContent = value;
+            list.appendChild(row);
+            document.getElementById('telemetry-empty').style.display = 'none';
+            document.getElementById('sensor-count').textContent = list.children.length;
         }
     }
 </script>

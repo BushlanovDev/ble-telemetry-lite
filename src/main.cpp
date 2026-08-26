@@ -440,7 +440,6 @@ void initWebServer() {
     webServer.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request) {
         String response = "{";
 
-        response += "\"vendor\": \"" + String(VENDOR) + "\", ";
         response += "\"model\": \"" + String(MODEL) + "\", ";
         response += "\"firmware\": \"" + String(FIRMWARE) + "\", ";
         response += "\"chip\": \"" + String(ESP.getChipModel()) + "\", ";
