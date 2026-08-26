@@ -43,15 +43,20 @@
 ## Прошивка
 
 Скачайте архив под свою плату со страницы [Releases](https://github.com/BushlanovDev/ble-telemetry-lite/releases) и распакуйте его. 
-Внутри: `bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin` и `merged.bin` (все четыре файла одним образом).
-Загрузчики плат не взаимозаменяемы — используйте архив только под свой чип.
+Внутри: `bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin` и `merged.bin` (все четыре файла одним образом).  
+Загрузчики плат не взаимозаменяемы - используйте архив только под свой чип.
 
 ### Прошивка через web интерфейс
 
 Переключить режим BLE/Wi-Fi можно нажатием кнопки Boot на модуле.
 
 В режиме Wi-Fi необходимо подлючиться к точке доступа **BLE Telemetry Lite** используя пароль **12345678**.  
-Web интерфейс доступен по адресу [http://192.168.4.1](http://192.168.4.1).
+Web интерфейс доступен по адресу [http://192.168.4.1](http://192.168.4.1).  
+Откройте Web интерфейс, вкладка **Update**, и загрузите `firmware.bin` из релизного ZIP-архива
+для вашего чипа (`esp32c3-supermini-*.zip` для ESP32-C3, `esp32s3-supermini-*.zip` для ESP32-S3).  
+OTA обновляет только приложение и сохраняет настройки. Остальные файлы из ZIP
+(`bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `merged.bin`) нужны только для
+проводной прошивки пустого или восстанавливаемого чипа.
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/web-interface.png?raw=true" alt="Web интерфейс" title="Web интерфейс" />
 

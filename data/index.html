@@ -19,6 +19,10 @@
         button:hover {opacity: 0.8;}
         form {text-align: center; margin-top: 10px;}
         #prg {width: 0; height: 20px; background: #00ff99; text-align: center; display: none;}
+        #device-info {font-weight: bold;}
+        .update-hint {color: #999; max-width: 500px;}
+        #update-status.ok {color: #66bb6a;}
+        #update-status.err {color: #ef5350;}
         .tabs {display: flex; justify-content: space-around; margin-bottom: 10px;}
         .tab {padding: 10px; cursor: pointer; background: #222; color: white; border-radius: 5px;}
         .tab.active {background: #00ff99; color: black;}
@@ -68,14 +72,20 @@
 </div>
 <div id="update" class="tab-content">
     <h2>Firmware Update</h2>
+    <p id="device-info"></p>
+    <p class="update-hint">
+        Upload <b>firmware.bin</b> from the release ZIP matching your chip
+        (for this device: <b><span id="zip-prefix">esp32XX</span>-supermini-&lt;version&gt;.zip</b>).
+    </p>
     <form id="upload-form">
         <div class="setting">
-            <input type="file" id="file" name="update">
+            <input type="file" id="file" name="update" accept=".bin" placeholder="firmware.bin">
             <button type="submit" id="update-btn">Update</button>
         </div>
     </form>
     <br>
     <div id="prg"></div>
+    <div id="update-status"></div>
 </div>
 <div id="telemetry" class="tab-content">
     <h2>Telemetry</h2>
@@ -93,28 +103,70 @@
         document.getElementById(tabId).classList.add('active');
         document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
     }
+    let device = null;
     document.addEventListener('DOMContentLoaded', async () => {
         let res = await fetch('/settings');
         let data = await res.json();
+        device = data;
         let tableBody = document.querySelector('#settings-table');
         ['vendor', 'model', 'firmware'].forEach(k => data[k] && (tableBody.innerHTML += `<tr><td>${k}</td><td>${data[k]}</td></tr>`));
         ['domain_name', 'serial_baudrate', 'mode'].forEach(k => {
             if (data[k]) document.getElementById(k).value = data[k];
         });
+        document.getElementById('device-info').textContent =
+            'Device: ' + (data.chip || 'unknown chip') + ', firmware ' + (data.firmware || '?');
+        const zipPrefix = {5: 'esp32c3', 9: 'esp32s3'}[data.chip_id];
+        if (zipPrefix) document.getElementById('zip-prefix').textContent = zipPrefix;
     });
     function updateSetting(k) {
         fetch(`/settings?${k}=` + encodeURIComponent(document.getElementById(k).value), {method: 'POST'});
     }
-    document.getElementById('upload-form').addEventListener('submit', e => {
+    function setStatus(text, ok) {
+        let el = document.getElementById('update-status');
+        el.textContent = text;
+        el.className = text ? (ok ? 'ok' : 'err') : '';
+    }
+    function chipName(id) {
+        return {0: 'ESP32', 2: 'ESP32-S2', 5: 'ESP32-C3', 9: 'ESP32-S3'}[id] || ('chip id ' + id);
+    }
+    document.getElementById('upload-form').addEventListener('submit', async e => {
         e.preventDefault();
         let prg = document.getElementById('prg');
         let updateBtn = document.getElementById('update-btn');
+        let file = document.getElementById('file').files[0];
+        if (!file) {
+            setStatus('Select a firmware.bin file first.', false);
+            return;
+        }
         updateBtn.disabled = true;
+        prg.style.display = 'none';
+        setStatus('', true);
+        try {
+            let hdr = new Uint8Array(await file.slice(0, 14).arrayBuffer());
+            if (hdr.length < 14) {
+                setStatus('File is too small to be a firmware image.', false);
+                updateBtn.disabled = false;
+                return;
+            }
+            let imgChip = hdr[12] | (hdr[13] << 8);
+            if (hdr[0] !== 0xE9) {
+                setStatus('Not a firmware image (bad magic byte). Select firmware.bin from the release ZIP.', false);
+                updateBtn.disabled = false;
+                return;
+            }
+            if (device && imgChip !== device.chip_id) {
+                setStatus('This file is for ' + chipName(imgChip) + ', this device is ' + chipName(device.chip_id) + '.', false);
+                updateBtn.disabled = false;
+                return;
+            }
+        } catch (err) {
+            // local read failed - let the server-side check decide
+        }
         prg.style.width = '0%';
         prg.textContent = '0%';
         prg.style.display = 'block';
         let req = new XMLHttpRequest();
-        req.open('POST', '/update?size=' + document.getElementById('file').files[0].size);
+        req.open('POST', '/update?size=' + file.size);
         req.upload.onprogress = p => {
             if (p.lengthComputable) {
                 let percent = Math.round((p.loaded / p.total) * 100) + '%';
@@ -122,7 +174,18 @@
                 prg.style.width = percent;
             }
         };
-        req.onload = req.onerror = () => updateBtn.disabled = false;
+        req.onload = () => {
+            if (req.status >= 400) {
+                updateBtn.disabled = false;
+                setStatus('Update failed: ' + (req.responseText || ('HTTP ' + req.status)), false);
+            } else {
+                setStatus('Update received. Rebooting... reconnect in ~10 seconds.', true);
+            }
+        };
+        req.onerror = () => {
+            updateBtn.disabled = false;
+            setStatus('Network error during upload.', false);
+        };
         req.send(new FormData(e.target));
     });
     let socket = null;

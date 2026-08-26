@@ -1,5 +1,6 @@
 #include "main.h"
 #include "index_html.h"
+#include <esp_chip_info.h>
 
 Preferences preferences;
 
@@ -165,11 +166,49 @@ class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
 
 static CharacteristicCallbacks chrCallbacks;
 
+static constexpr size_t IMAGE_HEADER_LEN = 14;
+static constexpr uint8_t IMAGE_MAGIC = 0xE9;
+
+static uint8_t otaHeader[IMAGE_HEADER_LEN];
+static size_t otaHeaderLen = 0;
+static bool otaHeaderChecked = false;
+static String otaRejectReason;
+
+static uint16_t imageChipId(const uint8_t *header) {
+    return (uint16_t)(header[12] | (header[13] << 8));
+}
+
+static uint16_t deviceChipId() {
+    esp_chip_info_t info;
+    esp_chip_info(&info);
+    return (uint16_t)info.model;
+}
+
+static String chipName(uint16_t chipId) {
+    switch (chipId) {
+        case 0:
+            return "ESP32";
+        case 2:
+            return "ESP32-S2";
+        case 5:
+            return "ESP32-C3";
+        case 9:
+            return "ESP32-S3";
+        case 13:
+            return "ESP32-C6";
+        default:
+            return "unknown chip (id " + String(chipId) + ")";
+    }
+}
+
 void handleUpdateEnd(AsyncWebServerRequest *request) {
-    if (Update.hasError()) {
+    if (!otaRejectReason.isEmpty()) {
+        request->send(400, "text/plain", otaRejectReason);
+        otaRejectReason = "";
+    } else if (Update.hasError()) {
         request->send(502, "text/plain", Update.errorString());
     } else {
-        AsyncWebServerResponse *response = request->beginResponse(307);
+        AsyncWebServerResponse *response = request->beginResponse(302);
         response->addHeader("Refresh", "10");
         response->addHeader("Location", "/");
         request->send(response);
@@ -187,6 +226,9 @@ void handleUpdate(AsyncWebServerRequest *request, const String &filename, size_t
     }
 
     if (!index) {
+        otaHeaderLen = 0;
+        otaHeaderChecked = false;
+        otaRejectReason = "";
         request->onDisconnect([]() {
             if (Update.isRunning()) {
                 Update.abort();
@@ -194,22 +236,56 @@ void handleUpdate(AsyncWebServerRequest *request, const String &filename, size_t
         });
         ESP_LOGI(TAG, "Receiving Update: %s, Size: %s", filename.c_str(),
                  fsize == UPDATE_SIZE_UNKNOWN ? "unknown" : String(fsize).c_str());
-        if (!Update.begin(fsize)) {
-            ESP_LOGI(TAG, "Error: %s", Update.errorString());
-            Update.printError(Serial);
+    }
+
+    if (!otaHeaderChecked && otaRejectReason.isEmpty()) {
+        const size_t need = IMAGE_HEADER_LEN - otaHeaderLen;
+        const size_t take = need < len ? need : len;
+        memcpy(otaHeader + otaHeaderLen, data, take);
+        otaHeaderLen += take;
+        data += take;
+        len -= take;
+
+        if (otaHeaderLen == IMAGE_HEADER_LEN) {
+            if (otaHeader[0] != IMAGE_MAGIC) {
+                otaRejectReason = "Not a firmware image (bad magic byte). Upload firmware.bin from the release ZIP.";
+                ESP_LOGW(TAG, "OTA rejected: bad magic byte");
+            } else if (imageChipId(otaHeader) != deviceChipId()) {
+                otaRejectReason =
+                    "Image is for " + chipName(imageChipId(otaHeader)) + ", this device is " + chipName(deviceChipId());
+                ESP_LOGW(TAG, "OTA rejected: %s", otaRejectReason.c_str());
+            } else {
+                otaHeaderChecked = true;
+                if (!Update.begin(fsize)) {
+                    ESP_LOGI(TAG, "Error: %s", Update.errorString());
+                    Update.printError(Serial);
+                } else if (Update.write(otaHeader, IMAGE_HEADER_LEN) != IMAGE_HEADER_LEN) {
+                    ESP_LOGI(TAG, "Error: %s", Update.errorString());
+                    Update.printError(Serial);
+                }
+            }
         }
     }
 
-    if (Update.isRunning() && Update.write(data, len) != len) {
+    if (otaHeaderChecked && Update.isRunning() && len > 0 && Update.write(data, len) != len) {
         ESP_LOGI(TAG, "Error: %s", Update.errorString());
         Update.printError(Serial);
     }
 
-    if (final && Update.isRunning()) {
-        const bool lenientEnd = (fsize == UPDATE_SIZE_UNKNOWN) && (Update.progress() > 0);
-        if (!Update.end(lenientEnd)) {
-            ESP_LOGI(TAG, "Error: %s", Update.errorString());
-            Update.printError(Serial);
+    if (final) {
+        if (!otaRejectReason.isEmpty()) {
+            return; // handleUpdateEnd sends the 400 response
+        }
+        if (!otaHeaderChecked) {
+            otaRejectReason = "Uploaded file is too small to be a firmware image.";
+            return;
+        }
+        if (Update.isRunning()) {
+            const bool lenientEnd = (fsize == UPDATE_SIZE_UNKNOWN) && (Update.progress() > 0);
+            if (!Update.end(lenientEnd)) {
+                ESP_LOGI(TAG, "Error: %s", Update.errorString());
+                Update.printError(Serial);
+            }
         }
     }
 }
@@ -367,6 +443,8 @@ void initWebServer() {
         response += "\"vendor\": \"" + String(VENDOR) + "\", ";
         response += "\"model\": \"" + String(MODEL) + "\", ";
         response += "\"firmware\": \"" + String(FIRMWARE) + "\", ";
+        response += "\"chip\": \"" + String(ESP.getChipModel()) + "\", ";
+        response += "\"chip_id\": " + String((unsigned)deviceChipId()) + ", ";
 
         response += "\"" + String(PREFERENCES_REC_DOMAIN_NAME) + "\": \"" + domainName.c_str() + "\", ";
         response += "\"" + String(PREFERENCES_REC_SERIAL_BAUDRATE) + "\": \"" + String(serialBaudrate) + "\", ";

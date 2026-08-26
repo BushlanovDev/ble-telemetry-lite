@@ -43,15 +43,20 @@ Connection to internal TX on a Jumper T20 transmitter example
 ## Flashing
 
 Download the archive matching your board from [Releases](https://github.com/BushlanovDev/ble-telemetry-lite/releases) and unpack it.
-It contains `bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin`, and `merged.bin` (all four files as a single image).
-The bootloaders differ between boards — use the archive for your chip only.
+It contains `bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin`, and `merged.bin` (all four files as a single image).  
+The bootloaders differ between boards - use the archive for your chip only.
 
 ### Firmware via web interface
 
 Switch between BLE and Wi-Fi modes by pressing the **Boot** button on the module.
 
-In Wi-Fi mode, connect to the **BLE Telemetry Lite** access point using the password: **12345678**.
-The web interface is accessible at [http://192.168.4.1](http://192.168.4.1).
+In Wi-Fi mode, connect to the **BLE Telemetry Lite** access point using the password: **12345678**.  
+The web interface is accessible at [http://192.168.4.1](http://192.168.4.1).  
+Open the web interface, go to the **Update** tab and upload `firmware.bin` from the release ZIP
+matching your chip (`esp32c3-supermini-*.zip` for ESP32-C3, `esp32s3-supermini-*.zip` for ESP32-S3).   
+OTA updates the application only and preserves your settings. The remaining files
+in the ZIP (`bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `merged.bin`) are only needed
+for wired flashing of a blank chip or one that needs recovery.
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/web-interface.png?raw=true" alt="Web Interface" title="Web Interface" />
 
