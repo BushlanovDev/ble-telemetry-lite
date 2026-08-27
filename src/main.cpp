@@ -455,7 +455,9 @@ void initWebServer() {
     });
 
     webServer.on("/", [](AsyncWebServerRequest *request) {
-        request->send(200, "text/html", (const uint8_t *)data_index_html, data_index_html_len);
+        AsyncWebServerResponse *response = request->beginResponse(200, "text/html", (const uint8_t *)data_index_html, data_index_html_len);
+        response->addHeader("Content-Encoding", "gzip");
+        request->send(response);
     });
 
     ws.onEvent(onWsEvent);
