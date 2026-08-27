@@ -52,6 +52,15 @@
 #define BOOT_DEBOUNCE_MS 50
 #define RESTART_DELAY_MS 1500
 
+// UART diagnostics
+#define UART_DIAG_WINDOW_MS 3000
+#define UART_DIAG_BAD_WINDOWS_TO_ENTER 2
+
+// UART diagnostics statuses (0 reserved = not set)
+#define UART_DIAG_OK 1
+#define UART_DIAG_NO_SIGNAL 2
+#define UART_DIAG_BAD_DATA 3
+
 // CRSF Protocol
 #define CRSF_ADDRESS_RADIO 0xEA
 #define CRSF_ADDRESS_RX 0xEC

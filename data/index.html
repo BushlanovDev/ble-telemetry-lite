@@ -70,6 +70,8 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
 #update-status.show{display:flex}
 #settings-status{display:none}
 #settings-status.show{display:flex}
+#uart-status{display:none}
+#uart-status.show{display:flex}
 .empty{padding:22px 12px;text-align:center;font-size:13px;color:#5c5c5c}
 </style>
 </head>
@@ -95,6 +97,7 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
         <div class="empty" id="telemetry-empty">Not connected</div>
         <div id="telemetry-list"></div>
     </div>
+    <div class="note err" id="uart-status"><span class="dot"></span><span id="uart-msg"></span></div>
     <button class="btn ok" id="ws-btn" onclick="toggleWebSocket()">Connect</button>
 </div>
 <div id="settings" class="tab-content">
@@ -159,6 +162,33 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
         '3750000': 'Direct connection to internal ELRS/TBS module',
         '5250000': 'Direct connection to the internal ELRS/TBS module'
     };
+    let UART_MSGS = {
+        2: 'No telemetry data coming in. Check the wiring — the transmitter itself sends nothing while the model link is down.',
+        3: 'Data is coming in but no valid CRSF frames were decoded — this usually means a baud rate mismatch.'
+    };
+    let EMPTY_LINK_STATS = new Uint8Array([0xEA, 0x0C, 0x14, 0x78, 0x78, 0x00, 0xEC, 0x00, 0x07, 0x02, 0x78, 0x00, 0xEC, 0x90]);
+    function setUartStatus(v) {
+        let el = document.getElementById('uart-status');
+        let msg = UART_MSGS[v];
+        if (!msg) {
+            el.className = 'note err';
+            return;
+        }
+        document.getElementById('uart-msg').textContent = msg;
+        el.className = 'note err show';
+    }
+    function bytesEquals(a, b) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+        return true;
+    }
+    async function refreshUartStatus() {
+        try {
+            let res = await fetch('/settings');
+            let data = await res.json();
+            if (data.uart_status !== undefined) setUartStatus(data.uart_status);
+        } catch (err) {}
+    }
     function showTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
@@ -189,6 +219,7 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
                 if (data[k]) document.getElementById(k).value = data[k];
             });
             if (data.mode !== undefined && data.mode !== null) setMode(String(data.mode));
+            if (data.uart_status !== undefined) setUartStatus(data.uart_status);
             showBaudHint();
         } catch (err) {
             document.getElementById('dev-sub').textContent = 'settings unavailable';
@@ -209,6 +240,9 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
                 setSaveStatus('Saved. Rebooting — reconnect in a few seconds.', true);
             } else {
                 setSaveStatus('Saved.', true);
+                if (k === 'serial_baudrate') {
+                    setTimeout(refreshUartStatus, 7000);
+                }
             }
         }).catch(() => setSaveStatus('Save failed: device unreachable.', false));
     }
@@ -326,6 +360,9 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
             socket.onmessage = (e) => {
                 if (e.data instanceof ArrayBuffer) {
                     let bytes = new Uint8Array(e.data);
+                    if (document.getElementById('uart-status').classList.contains('show') && !bytesEquals(bytes, EMPTY_LINK_STATS)) {
+                        setUartStatus(1);
+                    }
                     processCRSFData(bytes);
                 }
             };
