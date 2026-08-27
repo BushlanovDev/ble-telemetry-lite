@@ -2,53 +2,54 @@
 #include "index_html.h"
 #include <esp_chip_info.h>
 
-Preferences preferences;
+static Preferences preferences;
 
-HardwareSerial SerialPort(SERIAL_PORT);
+static HardwareSerial SerialPort(SERIAL_PORT);
 
-uint8_t crsfBuffer[CRSF_MAX_PACKET_SIZE];
-size_t crsfIndex = 0;
-GENERIC_CRC8 crsfCrc(CRSF_CRC_POLY);
+static uint8_t crsfBuffer[CRSF_MAX_PACKET_SIZE];
+static size_t crsfIndex = 0;
+static GENERIC_CRC8 crsfCrc(CRSF_CRC_POLY);
 
-uint32_t serialBaudrate = DEFAULT_SERIAL_BAUDRATE;
-std::string domainName = DEFAULT_DOMAIN_NAME;
-std::string password = DEFAULT_PASSWORD;
+static uint32_t serialBaudrate = DEFAULT_SERIAL_BAUDRATE;
+static std::string domainName = DEFAULT_DOMAIN_NAME;
+static std::string password = DEFAULT_PASSWORD;
 
-uint8_t mode = MODE_BLE;
+static uint8_t mode = MODE_BLE;
 
-bool bleDeviceConnected = false;
-uint16_t bleActiveConnHandle = BLE_HS_CONN_HANDLE_NONE;
-uint16_t bleCurrentMtu = 23;
-bool bleMtuWarned = false;
-bool bleTxSubscribed = false;
-bool deviceShouldShutdown = true;
+static bool bleDeviceConnected = false;
+static uint16_t bleActiveConnHandle = BLE_HS_CONN_HANDLE_NONE;
+static uint16_t bleCurrentMtu = 23;
+static bool bleMtuWarned = false;
+static bool bleTxSubscribed = false;
+static bool deviceShouldShutdown = true;
 
-unsigned long startTime = 0;
-unsigned long nextTimeLinkStats = 0;
-unsigned long packetCount = 0;
+static unsigned long startTime = 0;
+static unsigned long nextTimeLinkStats = 0;
+static unsigned long packetCount = 0;
 
-AsyncWebServer webServer(DEFAULT_WEB_PORT);
-AsyncWebSocket ws("/ws");
-volatile uint32_t wsClientId = 0;
+static AsyncWebServer webServer(DEFAULT_WEB_PORT);
+static AsyncWebSocket ws("/ws");
+static volatile uint32_t wsClientId = 0;
 
-NimBLEAdvertising *pAdvertising;
-NimBLEServer *pServer;
+static NimBLEAdvertising *pAdvertising;
+static NimBLEServer *pServer;
 
-NimBLECharacteristic *pCharacteristicVendor;
-NimBLECharacteristic *pCharacteristicModel;
-NimBLECharacteristic *pCharacteristicFirmware;
+static NimBLECharacteristic *pCharacteristicVendor;
+static NimBLECharacteristic *pCharacteristicModel;
+static NimBLECharacteristic *pCharacteristicFirmware;
 
-NimBLECharacteristic *pCharacteristicTX;
-NimBLECharacteristic *pCharacteristicRX;
+static NimBLECharacteristic *pCharacteristicTX;
+static NimBLECharacteristic *pCharacteristicRX;
 
-NimBLECharacteristic *pCharacteristicBaudrate;
-NimBLECharacteristic *pCharacteristicDomain;
-NimBLECharacteristic *pCharacteristicMode;
-NimBLECharacteristic *pCharacteristicUartStatus;
+static NimBLECharacteristic *pCharacteristicBaudrate;
+static NimBLECharacteristic *pCharacteristicDomain;
+static NimBLECharacteristic *pCharacteristicMode;
+static NimBLECharacteristic *pCharacteristicUartStatus;
 
-static inline bool isValidMode(uint8_t m) { return m == MODE_BLE || m == MODE_WEB; }
-static inline bool isValidBaudrate(uint32_t b) { return b >= SERIAL_BAUDRATE_MIN && b <= SERIAL_BAUDRATE_MAX; }
-static bool isValidDomainName(const uint8_t *data, size_t len) {
+static inline bool isValidMode(const uint8_t m) { return m == MODE_BLE || m == MODE_WEB; }
+static inline bool isValidBaudrate(const uint32_t b) { return b >= SERIAL_BAUDRATE_MIN && b <= SERIAL_BAUDRATE_MAX; }
+
+static bool isValidDomainName(const uint8_t *data, const size_t len) {
     if (len == 0 || len > DOMAIN_NAME_MAX_LENGTH) {
         return false;
     }
@@ -60,9 +61,9 @@ static bool isValidDomainName(const uint8_t *data, size_t len) {
     return true;
 }
 
-volatile bool pendingRestart = false;
-volatile unsigned long restartRequestTime = 0;
-volatile bool pendingFlush = false;
+static volatile bool pendingRestart = false;
+static volatile unsigned long restartRequestTime = 0;
+static volatile bool pendingFlush = false;
 
 static inline void requestRestart() {
     restartRequestTime = millis();
@@ -70,8 +71,8 @@ static inline void requestRestart() {
 }
 
 // UART diagnostics: fed by the CRSF parser, evaluated once per window in loop()
-volatile uint8_t uartDiagStatus = UART_DIAG_OK;
-volatile bool pendingDiagReset = false;
+static volatile uint8_t uartDiagStatus = UART_DIAG_OK;
+static volatile bool pendingDiagReset = false;
 static uint32_t diagBytes = 0;
 static uint32_t diagFrames = 0;
 static uint32_t diagBadWindows = 0;
@@ -120,105 +121,113 @@ static void uartDiagEvaluate() {
     }
 }
 
-class ServerCallbacks final : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override {
-        bleActiveConnHandle = connInfo.getConnHandle();
-        bleCurrentMtu = 23;
-        bleMtuWarned = false;
-        bleTxSubscribed = false;
-        bleDeviceConnected = true;
-        deviceShouldShutdown = false;
-        NimBLEDevice::setPower(DEFAULT_BLE_DBM_HIGH_PWR);
-        pendingFlush = true;
-        ESP_LOGI(TAG, "BLEServer onConnect power up and disable shutdown timer");
-    }
-
-    void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override {
-        if (connInfo.getConnHandle() == bleActiveConnHandle) {
-            bleActiveConnHandle = BLE_HS_CONN_HANDLE_NONE;
+namespace {
+    class ServerCallbacks final : public NimBLEServerCallbacks {
+    public:
+        void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override {
+            bleActiveConnHandle = connInfo.getConnHandle();
+            bleCurrentMtu = 23;
+            bleMtuWarned = false;
             bleTxSubscribed = false;
-        }
-        bleDeviceConnected = (pServer->getConnectedCount() > 0);
-        if (!bleDeviceConnected) {
-            NimBLEDevice::setPower(DEFAULT_BLE_DBM_LOW_PWR);
-            NimBLEDevice::startAdvertising();
-        }
-        ESP_LOGI(TAG, "BLEServer onDisconnect power down");
-    }
-
-    void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override {
-        bleCurrentMtu = MTU;
-        if (MTU < CRSF_MAX_PACKET_SIZE + 3) {
-            ESP_LOGW(TAG, "Negotiated MTU %u < %u (conn %u); telemetry may be truncated", MTU, (unsigned)(CRSF_MAX_PACKET_SIZE + 3), connInfo.getConnHandle());
-        } else {
-            ESP_LOGI(TAG, "MTU updated: %u for connection ID: %u", MTU, connInfo.getConnHandle());
-        }
-    }
-};
-
-class TXCharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
-    void onSubscribe(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo, uint16_t subValue) override {
-        bleTxSubscribed = (subValue != 0);
-        if (subValue != 0) {
-            // Discovery is done by now; only then request the fast connection interval needed for telemetry.
-            NimBLEDevice::getServer()->updateConnParams(connInfo.getConnHandle(), 6, 6, 0, 500);
-        }
-        ESP_LOGI(TAG, "FFF6 notifications %s by connection %u", subValue ? "enabled" : "disabled", connInfo.getConnHandle());
-    }
-};
-
-static TXCharacteristicCallbacks txCallbacks;
-
-class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
-        if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID()) {
-            const auto v = pCharacteristic->getValue();
-            if (v.size() < sizeof(uint32_t)) {
-                return;
-            }
-            uint32_t newBaudrate;
-            memcpy(&newBaudrate, v.data(), sizeof(uint32_t));
-            if (!isValidBaudrate(newBaudrate)) {
-                ESP_LOGW(TAG, "Rejected invalid baudrate: %u", newBaudrate);
-                return;
-            }
-            serialBaudrate = newBaudrate;
-            preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, serialBaudrate);
-            SerialPort.updateBaudRate(serialBaudrate);
-            pendingDiagReset = true;
+            bleDeviceConnected = true;
+            deviceShouldShutdown = false;
+            NimBLEDevice::setPower(DEFAULT_BLE_DBM_HIGH_PWR);
             pendingFlush = true;
-            ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serialBaudrate);
-        } else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID()) {
-            const auto v = pCharacteristic->getValue();
-            if (!isValidDomainName(v.data(), v.size())) {
-                ESP_LOGW(TAG, "Rejected invalid domain name (length %u)", (unsigned)v.size());
-                return;
-            }
-            domainName.assign(reinterpret_cast<const char *>(v.data()), v.size());
-            preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domainName.data(), domainName.size());
-            NimBLEDevice::setDeviceName(domainName);
-            pAdvertising = NimBLEDevice::getAdvertising();
-            pAdvertising->setName(domainName);
-            ESP_LOGI(TAG, "Domain name updated: %s", domainName.c_str());
-        } else if (pCharacteristic->getUUID() == pCharacteristicMode->getUUID()) {
-            const auto v = pCharacteristic->getValue();
-            if (v.size() < 1) {
-                return;
-            }
-            const uint8_t newMode = static_cast<uint8_t>(v.data()[0]);
-            if (!isValidMode(newMode)) {
-                ESP_LOGW(TAG, "Rejected invalid mode: %u", newMode);
-                return;
-            }
-            mode = newMode;
-            preferences.putUInt(PREFERENCES_REC_MODE, mode);
-            ESP_LOGI(TAG, "Mode updated: %d", mode);
-            requestRestart();
+            ESP_LOGI(TAG, "BLEServer onConnect power up and disable shutdown timer");
         }
-    }
-};
 
-static CharacteristicCallbacks chrCallbacks;
+        void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override {
+            if (connInfo.getConnHandle() == bleActiveConnHandle) {
+                bleActiveConnHandle = BLE_HS_CONN_HANDLE_NONE;
+                bleTxSubscribed = false;
+            }
+            bleDeviceConnected = (pServer->getConnectedCount() > 0);
+            if (!bleDeviceConnected) {
+                NimBLEDevice::setPower(DEFAULT_BLE_DBM_LOW_PWR);
+                NimBLEDevice::startAdvertising();
+            }
+            ESP_LOGI(TAG, "BLEServer onDisconnect power down");
+        }
+
+        void onMTUChange(const uint16_t MTU, NimBLEConnInfo &connInfo) override {
+            bleCurrentMtu = MTU;
+            if (MTU < CRSF_MAX_PACKET_SIZE + 3) {
+                ESP_LOGW(TAG, "Negotiated MTU %u < %u (conn %u); telemetry may be truncated", MTU, (unsigned)(CRSF_MAX_PACKET_SIZE + 3), connInfo.getConnHandle());
+            } else {
+                ESP_LOGI(TAG, "MTU updated: %u for connection ID: %u", MTU, connInfo.getConnHandle());
+            }
+        }
+    };
+
+    class TXCharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
+    public:
+        void onSubscribe(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo, uint16_t subValue) override {
+            bleTxSubscribed = (subValue != 0);
+            if (subValue != 0) {
+                // Discovery is done by now; only then request the fast connection interval needed for telemetry.
+                NimBLEDevice::getServer()->updateConnParams(connInfo.getConnHandle(), 6, 6, 0, 500);
+            }
+            ESP_LOGI(TAG, "FFF6 notifications %s by connection %u", subValue ? "enabled" : "disabled", connInfo.getConnHandle());
+        }
+    };
+
+    static TXCharacteristicCallbacks txCallbacks;
+
+    class CharacteristicCallbacks final : public NimBLECharacteristicCallbacks {
+    public:
+        void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
+            if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID()) {
+                const auto v = pCharacteristic->getValue();
+                if (v.size() < sizeof(uint32_t)) {
+                    return;
+                }
+
+                uint32_t newBaudrate;
+                memcpy(&newBaudrate, v.data(), sizeof(uint32_t));
+                if (!isValidBaudrate(newBaudrate)) {
+                    ESP_LOGW(TAG, "Rejected invalid baudrate: %u", newBaudrate);
+                    return;
+                }
+
+                serialBaudrate = newBaudrate;
+                preferences.putUInt(PREFERENCES_REC_SERIAL_BAUDRATE, serialBaudrate);
+                SerialPort.updateBaudRate(serialBaudrate);
+                pendingDiagReset = true;
+                pendingFlush = true;
+                ESP_LOGI(TAG, "SerialPort baudrate updated: %d", serialBaudrate);
+            } else if (pCharacteristic->getUUID() == pCharacteristicDomain->getUUID()) {
+                const auto v = pCharacteristic->getValue();
+                if (!isValidDomainName(v.data(), v.size())) {
+                    ESP_LOGW(TAG, "Rejected invalid domain name (length %u)", (unsigned)v.size());
+                    return;
+                }
+
+                domainName.assign(reinterpret_cast<const char *>(v.data()), v.size());
+                preferences.putBytes(PREFERENCES_REC_DOMAIN_NAME, domainName.data(), domainName.size());
+                NimBLEDevice::setDeviceName(domainName);
+                pAdvertising = NimBLEDevice::getAdvertising();
+                pAdvertising->setName(domainName);
+                ESP_LOGI(TAG, "Domain name updated: %s", domainName.c_str());
+            } else if (pCharacteristic->getUUID() == pCharacteristicMode->getUUID()) {
+                const auto v = pCharacteristic->getValue();
+                if (v.size() < 1) {
+                    return;
+                }
+                const uint8_t newMode = static_cast<uint8_t>(v.data()[0]);
+                if (!isValidMode(newMode)) {
+                    ESP_LOGW(TAG, "Rejected invalid mode: %u", newMode);
+                    return;
+                }
+                mode = newMode;
+                preferences.putUInt(PREFERENCES_REC_MODE, mode);
+                ESP_LOGI(TAG, "Mode updated: %d", mode);
+                requestRestart();
+            }
+        }
+    };
+
+    static CharacteristicCallbacks chrCallbacks;
+}
 
 static constexpr size_t IMAGE_HEADER_LEN = 14;
 static constexpr uint8_t IMAGE_MAGIC = 0xE9;
@@ -229,7 +238,7 @@ static bool otaHeaderChecked = false;
 static String otaRejectReason;
 
 static uint16_t imageChipId(const uint8_t *header) {
-    return (uint16_t)(header[12] | (header[13] << 8));
+    return (uint16_t)((unsigned)header[12] | ((unsigned)header[13] << 8));
 }
 
 static uint16_t deviceChipId() {
@@ -255,7 +264,7 @@ static String chipName(uint16_t chipId) {
     }
 }
 
-void handleUpdateEnd(AsyncWebServerRequest *request) {
+static void handleUpdateEnd(AsyncWebServerRequest *request) {
     if (!otaRejectReason.isEmpty()) {
         request->send(400, "text/plain", otaRejectReason);
         otaRejectReason = "";
@@ -270,7 +279,7 @@ void handleUpdateEnd(AsyncWebServerRequest *request) {
     }
 }
 
-void handleUpdate(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
+static void handleUpdate(AsyncWebServerRequest *request, const String &filename, const size_t index, uint8_t *data, size_t len, const bool final) {
     size_t fsize = UPDATE_SIZE_UNKNOWN;
     if (request->hasArg("size")) {
         const long s = request->arg("size").toInt();
@@ -305,8 +314,7 @@ void handleUpdate(AsyncWebServerRequest *request, const String &filename, size_t
                 otaRejectReason = "Not a firmware image (bad magic byte). Upload firmware.bin from the release ZIP.";
                 ESP_LOGW(TAG, "OTA rejected: bad magic byte");
             } else if (imageChipId(otaHeader) != deviceChipId()) {
-                otaRejectReason =
-                    "Image is for " + chipName(imageChipId(otaHeader)) + ", this device is " + chipName(deviceChipId());
+                otaRejectReason = "Image is for " + chipName(imageChipId(otaHeader)) + ", this device is " + chipName(deviceChipId());
                 ESP_LOGW(TAG, "OTA rejected: %s", otaRejectReason.c_str());
             } else {
                 otaHeaderChecked = true;
@@ -344,7 +352,7 @@ void handleUpdate(AsyncWebServerRequest *request, const String &filename, size_t
     }
 }
 
-void handleSetSettings(AsyncWebServerRequest *request) {
+static void handleSetSettings(AsyncWebServerRequest *request) {
     if (request->hasArg(PREFERENCES_REC_SERIAL_BAUDRATE)) {
         const uint32_t newBaudrate = (uint32_t)request->arg(PREFERENCES_REC_SERIAL_BAUDRATE).toInt();
         if (!isValidBaudrate(newBaudrate)) {
@@ -387,7 +395,7 @@ void handleSetSettings(AsyncWebServerRequest *request) {
     }
 }
 
-void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+static void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
     if (type == WS_EVT_CONNECT) {
         ESP_LOGI(TAG, "WebSocket client connected from %s", client->remoteIP().toString().c_str());
         const uint32_t prevId = wsClientId;
@@ -405,7 +413,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     }
 }
 
-void onWiFiAPStarted(WiFiEvent_t event, WiFiEventInfo_t info) {
+static void onWiFiAPStarted(WiFiEvent_t event, WiFiEventInfo_t info) {
     if (!WiFi.setTxPower(DEFAULT_WIFI_LOW_PWR)) {
         ESP_LOGE(TAG, "Failed to set WiFi AP TX power to low");
         return;
@@ -413,24 +421,24 @@ void onWiFiAPStarted(WiFiEvent_t event, WiFiEventInfo_t info) {
     ESP_LOGI(TAG, "WiFi AP started, TX power set to low");
 }
 
-void onWiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+static void onWiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
     ESP_LOGI(TAG, "WiFi client connected power up and disabling shutdown timer");
     WiFi.setTxPower(DEFAULT_WIFI_HIGH_PWR);
     deviceShouldShutdown = false;
 }
 
-void onWiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+static void onWiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
     ESP_LOGI(TAG, "WiFi client disconnected power down");
     WiFi.setTxPower(DEFAULT_WIFI_LOW_PWR);
 }
 
-void initSerial() {
+static void initSerial() {
     SerialPort.setRxBufferSize(512);
     SerialPort.begin(serialBaudrate, SERIAL_8N1, SERIAL_PIN_RX);
     ESP_LOGI(TAG, "Serial initialized");
 }
 
-void initBLE() {
+static void initBLE() {
     NimBLEDevice::init(domainName);
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
@@ -480,7 +488,7 @@ void initBLE() {
     ESP_LOGI(TAG, "BLE initialized");
 }
 
-void initWiFi() {
+static void initWiFi() {
     WiFi.onEvent(onWiFiAPStarted, ARDUINO_EVENT_WIFI_AP_START);
     WiFi.onEvent(onWiFiStationConnected, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
     WiFi.onEvent(onWiFiStationDisconnected, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
@@ -491,7 +499,7 @@ void initWiFi() {
     ESP_LOGI(TAG, "WiFi AP initialized name: %s, password: %s", domainName.c_str(), password.c_str());
 }
 
-void initWebServer() {
+static void initWebServer() {
     webServer.on("/update", HTTP_POST, handleUpdateEnd, handleUpdate);
 
     webServer.on("/settings", HTTP_POST, handleSetSettings);
@@ -527,7 +535,7 @@ void initWebServer() {
     ESP_LOGI(TAG, "Web Server initialized at http://%s", WiFi.softAPIP().toString().c_str());
 }
 
-void initPreferences() {
+static void initPreferences() {
     preferences.begin(PREFERENCES_NAME, false);
 
     if (preferences.isKey(PREFERENCES_REC_SERIAL_BAUDRATE)) {
@@ -566,10 +574,11 @@ void initPreferences() {
     ESP_LOGI(TAG, "Preferences initialized");
 }
 
-void sendBleData(const uint8_t *data, size_t size) {
+static void sendBleData(const uint8_t *data, size_t size) {
     if (!bleTxSubscribed) {
         return;
     }
+
     if (size > bleCurrentMtu - 3) {
         if (!bleMtuWarned) {
             bleMtuWarned = true;
@@ -577,6 +586,7 @@ void sendBleData(const uint8_t *data, size_t size) {
         }
         return;
     }
+
     const bool ok = (bleActiveConnHandle != BLE_HS_CONN_HANDLE_NONE)
                         ? pCharacteristicTX->notify(data, size, bleActiveConnHandle)
                         : pCharacteristicTX->notify(data, size);
@@ -585,13 +595,13 @@ void sendBleData(const uint8_t *data, size_t size) {
     }
 }
 
-void sendWSData(const uint8_t *data, size_t size) {
+static void sendWSData(const uint8_t *data, const size_t size) {
     if (ws.availableForWrite(wsClientId)) {
         ws.binaryAll(data, size);
     }
 }
 
-void sendData(const uint8_t *data, size_t size) {
+static void sendData(const uint8_t *data, const size_t size) {
     if (bleDeviceConnected) {
         sendBleData(data, size);
     } else if (wsClientId != 0) {
@@ -599,10 +609,10 @@ void sendData(const uint8_t *data, size_t size) {
     }
 }
 
-void initLog() {
+static void initLog() {
     Serial.begin(DEFAULT_SERIAL_BAUDRATE);
     Serial.setDebugOutput(true);
-    uint32_t serialConnectStart = millis();
+    const uint32_t serialConnectStart = millis();
     while (!Serial && millis() - serialConnectStart < SERIAL_CONNECT_TIMEOUT_MS) {
         delay(10);
     }
