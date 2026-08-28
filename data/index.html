@@ -42,7 +42,8 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
 .srow{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid #232323}
 .srow:first-child{border-top:0}
 .srow .k{font-size:13px;color:#9a9a9a}
-.srow .v{font:13px ui-monospace,Menlo,monospace;color:#e8e8e8;text-align:right;white-space:nowrap}
+#telemetry-list .srow .v{font:13px ui-monospace,Menlo,monospace;color:#00ff99;text-align:right;white-space:nowrap}
+#telemetry-list.stale .srow .v{color:#ef5350}
 .lhd{display:flex;justify-content:space-between;align-items:center;padding:0 2px}
 .lhd .n{font:11px ui-monospace,Menlo,monospace;color:#5c5c5c}
 .btn{padding:11px 0;border:1px solid #333;border-radius:9px;background:none;color:#e8e8e8;font:600 13px system-ui,sans-serif;cursor:pointer;width:100%}
@@ -339,10 +340,29 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
         req.send(new FormData(e.target));
     });
     let socket = null;
+    let staleCount = 0;
+    let userClosedWs = false;
+    const STALE_THRESHOLD = 2;
+    function resetTelemetry() {
+        let list = document.getElementById('telemetry-list');
+        list.innerHTML = '';
+        list.classList.remove('stale');
+        staleCount = 0;
+        document.getElementById('sensor-count').textContent = '0';
+        setUartStatus(0);
+        updateTelemetryEmpty();
+    }
+    function updateTelemetryEmpty() {
+        let connected = socket && socket.readyState === WebSocket.OPEN;
+        let el = document.getElementById('telemetry-empty');
+        el.textContent = connected ? 'Waiting for telemetry\u2026' : 'Not connected';
+        el.style.display = document.getElementById('telemetry-list').children.length ? 'none' : '';
+    }
     function toggleWebSocket() {
         let btn = document.getElementById("ws-btn");
         let pill = document.getElementById('live-pill');
         if (socket && socket.readyState === WebSocket.OPEN) {
+            userClosedWs = true;
             socket.close();
         } else {
             socket = new WebSocket("ws://" + window.location.hostname + "/ws");
@@ -351,16 +371,34 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
                 btn.textContent = "Disconnect";
                 btn.className = 'btn danger';
                 pill.classList.add('on');
+                userClosedWs = false;
+                refreshUartStatus();
+                updateTelemetryEmpty();
             };
             socket.onclose = () => {
                 btn.textContent = "Connect";
                 btn.className = 'btn ok';
                 pill.classList.remove('on');
+                if (userClosedWs) {
+                    resetTelemetry();
+                } else if (document.getElementById('telemetry-list').children.length) {
+                    document.getElementById('telemetry-list').classList.add('stale');
+                }
+                userClosedWs = false;
+                updateTelemetryEmpty();
             };
             socket.onmessage = (e) => {
                 if (e.data instanceof ArrayBuffer) {
                     let bytes = new Uint8Array(e.data);
-                    if (document.getElementById('uart-status').classList.contains('show') && !bytesEquals(bytes, EMPTY_LINK_STATS)) {
+                    if (bytesEquals(bytes, EMPTY_LINK_STATS)) {
+                        if (++staleCount >= STALE_THRESHOLD) {
+                            document.getElementById('telemetry-list').classList.add('stale');
+                        }
+                        return;
+                    }
+                    staleCount = 0;
+                    document.getElementById('telemetry-list').classList.remove('stale');
+                    if (document.getElementById('uart-status').classList.contains('show')) {
                         setUartStatus(1);
                     }
                     processCRSFData(bytes);

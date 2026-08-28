@@ -45,7 +45,7 @@
 // Const values
 #define VENDOR "SkyDevices.ru"
 #define MODEL "BLE Telemetry Lite"
-#define FIRMWARE "0.5.1"
+#define FIRMWARE "0.6.0"
 #define DOMAIN_NAME_MAX_LENGTH 20
 #define SERIAL_BAUDRATE_MIN 1200
 #define SERIAL_BAUDRATE_MAX 5250000
