@@ -1,6 +1,5 @@
 #include "main.h"
 #include "index_html.h"
-#include <esp_chip_info.h>
 
 static Preferences preferences;
 
@@ -29,6 +28,7 @@ static unsigned long packetCount = 0;
 
 static AsyncWebServer webServer(DEFAULT_WEB_PORT);
 static AsyncWebSocket ws("/ws");
+static DNSServer dnsServer;
 static volatile uint32_t wsClientId = 0;
 
 static NimBLEAdvertising *pAdvertising;
@@ -497,6 +497,12 @@ static void initWiFi() {
         ESP_LOGE(TAG, "WiFi.softAP failed (domain name length: %u)", (unsigned)domainName.size());
     }
     ESP_LOGI(TAG, "WiFi AP initialized name: %s, password: %s", domainName.c_str(), password.c_str());
+
+    if (!dnsServer.start(DNS_PORT, "*", WiFi.softAPIP())) {
+        ESP_LOGE(TAG, "Failed to start DNS server on port %d", DNS_PORT);
+    } else {
+        ESP_LOGI(TAG, "DNS server started, wildcard -> %s", WiFi.softAPIP().toString().c_str());
+    }
 }
 
 static void initWebServer() {
@@ -526,6 +532,14 @@ static void initWebServer() {
         AsyncWebServerResponse *response = request->beginResponse(200, "text/html", (const uint8_t *)data_index_html, data_index_html_len);
         response->addHeader("Content-Encoding", "gzip");
         request->send(response);
+    });
+
+    webServer.onNotFound([](AsyncWebServerRequest *request) {
+        if (request->method() == HTTP_GET || request->method() == HTTP_HEAD) {
+            request->redirect("http://" + WiFi.softAPIP().toString() + "/");
+            return;
+        }
+        request->send(404, "text/plain", "Not Found");
     });
 
     ws.onEvent(onWsEvent);
@@ -671,6 +685,7 @@ void setup() {
 
 void IRAM_ATTR loop() {
     if (mode == MODE_WEB) {
+        dnsServer.processNextRequest();
         ws.cleanupClients();
     }
     if (pendingRestart && millis() - restartRequestTime >= RESTART_DELAY_MS) {

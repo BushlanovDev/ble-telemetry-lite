@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <esp_attr.h>
+#include <esp_chip_info.h>
 #include <esp_log.h>
 #include <NimBLEDevice.h>
 #include <Preferences.h>
@@ -9,6 +10,7 @@
 #include <string>
 #include <Update.h>
 #include <WiFi.h>
+#include <DNSServer.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "crc.h"
@@ -51,6 +53,7 @@
 #define SERIAL_BAUDRATE_MAX 5250000
 #define BOOT_DEBOUNCE_MS 50
 #define RESTART_DELAY_MS 1500
+#define DNS_PORT 53
 
 // UART diagnostics
 #define UART_DIAG_WINDOW_MS 3000
