@@ -344,6 +344,7 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
     let userClosedWs = false;
     const STALE_THRESHOLD = 2;
     function resetTelemetry() {
+        gpsState = { home: null, traveledM: 0, lastFixMs: 0 };
         let list = document.getElementById('telemetry-list');
         list.innerHTML = '';
         list.classList.remove('stale');
@@ -438,6 +439,33 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
             default: return rate;
         }
     }
+    // CRSF spec: signed helpers (payload bytes are unsigned in JS)
+    function toInt16(v) { return v > 32767 ? v - 65536 : v; }
+    function toInt8(v) { return v > 127 ? v - 256 : v; }
+    // CRSF spec 0x09: altitude_packed -> decimeters (MSB=1: meters without offset)
+    function unpackAlt09(p) {
+        return (p & 0x8000) ? (p & 0x7fff) * 10 : (p - 10000);
+    }
+    // CRSF spec 0x09: vertical_speed_packed (int8, log scale) -> cm/s
+    function unpackVario09(v) {
+        const Kr = 0.026, Kl = 100;
+        const s = v < 0 ? -1 : 1;
+        return s * (Math.exp(Math.abs(v) * Kr) - 1) * Kl;
+    }
+    // great-circle distance in meters
+    function haversineM(lat1, lon1, lat2, lon2) {
+        const R = 6371000, rad = Math.PI / 180;
+        const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+        const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+    }
+    const GPS_HOME_MIN_SATS = 6;
+    const GPS_ODO_MAX_DT_MS = 2000;
+    let gpsState = { home: null, traveledM: 0, lastFixMs: 0 };
+    function fmtDistance(m) {
+        return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(2) + ' km';
+    }
     function processCRSFData(bytes) {
         let packetType = bytes[2];
         let payload = bytes.slice(3, -1);
@@ -455,11 +483,26 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
                 let latitude = dataView.getInt32(0, false) / 1e7;
                 let longitude = dataView.getInt32(4, false) / 1e7;
                 let speed = (payload[8] << 8 | payload[9]) / 10;
+                let heading = (payload[10] << 8 | payload[11]) / 100;
                 let altitudeGPS = (payload[12] << 8 | payload[13]) - 1000;
                 let satellite = payload[14];
-                if (latitude != 0.0 && longitude != 0.0) {
+                let hasFix = latitude != 0.0 && longitude != 0.0;
+                if (hasFix) {
                     addRow("Latitude", latitude.toFixed(6));
                     addRow("Longitude", longitude.toFixed(6));
+                    if (gpsState.home === null && satellite >= GPS_HOME_MIN_SATS) {
+                        gpsState.home = { lat: latitude, lon: longitude };
+                    }
+                    let now = Date.now();
+                    if (gpsState.lastFixMs && now > gpsState.lastFixMs && now - gpsState.lastFixMs <= GPS_ODO_MAX_DT_MS) {
+                        gpsState.traveledM += speed / 3.6 * (now - gpsState.lastFixMs) / 1000;
+                    }
+                    gpsState.lastFixMs = now;
+                    if (gpsState.home !== null) {
+                        addRow("Distance to home", fmtDistance(haversineM(gpsState.home.lat, gpsState.home.lon, latitude, longitude)));
+                    }
+                    addRow("Traveled", fmtDistance(gpsState.traveledM));
+                    addRow("Heading", heading.toFixed(0) + "\u00b0");
                 }
                 addRow("Speed", speed + " km/h");
                 addRow("Altitude GPS", altitudeGPS + " m");
@@ -475,12 +518,27 @@ select{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
                 addRow("Downlink LQ", payload[8] + "%");
                 break;
             case 0x09:
-                let altitude = (payload[0] << 8 | payload[1]) - 1000;
-                addRow("Altitude", altitude + " m");
+                let altPacked = payload[0] << 8 | payload[1];
+                addRow("Altitude", unpackAlt09(altPacked) / 10 + " m");
+                if (payload.length >= 3) {
+                    let vs09 = unpackVario09(toInt8(payload[2])) / 100; // cm/s -> m/s
+                    addRow("Vertical speed", (vs09 >= 0 ? '+' : '') + vs09.toFixed(1) + " m/s");
+                }
                 break;
             case 0x0A:
                 let airspeed = (payload[0] << 8 | payload[1]) / 10;
                 addRow("Airspeed", airspeed.toFixed(1) + " km/h");
+                break;
+            case 0x21:
+                let flightMode = '';
+                for (let i = 0; i < payload.length && payload[i] !== 0; i++) {
+                    flightMode += String.fromCharCode(payload[i]);
+                }
+                if (flightMode) addRow("Flight mode", flightMode);
+                break;
+            case 0x07:
+                let vspeed = toInt16(payload[0] << 8 | payload[1]) / 100; // cm/s -> m/s
+                addRow("Vertical speed", (vspeed >= 0 ? '+' : '') + vspeed.toFixed(1) + " m/s");
                 break;
         }
     }
