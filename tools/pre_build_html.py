@@ -1,4 +1,5 @@
 import gzip
+import io
 import os
 
 html_source_path = os.path.join("data", "index.html")
@@ -6,12 +7,14 @@ header_output_path = os.path.join("src", "index_html.h")
 
 os.makedirs(os.path.dirname(header_output_path), exist_ok=True)
 
-print(f"Converting {html_source_path} to {header_output_path}")
-
 with open(html_source_path, "rb") as f:
     html = f.read()
 
-compressed = gzip.compress(html, compresslevel=9)
+# mtime=0 keeps the build time out of the gzip header: the same HTML always gives the same bytes
+gzip_buffer = io.BytesIO()
+with gzip.GzipFile(filename="", fileobj=gzip_buffer, mode="wb", compresslevel=9, mtime=0) as gz:
+    gz.write(html)
+compressed = gzip_buffer.getvalue()
 
 array_name = os.path.basename(html_source_path).replace(".", "_") # например, index_html
 if html_source_path.startswith("data" + os.path.sep):
@@ -33,8 +36,16 @@ content = (
     f"const unsigned int {array_name}_len = {len(compressed)};\n"
 )
 
-with open(header_output_path, "w", newline="\n") as f:
-    f.write(content)
+try:
+    with open(header_output_path, "r", newline="") as f:
+        current_content = f.read()
+except OSError:
+    current_content = None
 
-print(f"Gzipped {html_source_path}: {len(html)} -> {len(compressed)} bytes")
-print(f"Modified {header_output_path} for PROGMEM.")
+# Leave the file untouched when nothing changed, otherwise main.cpp is recompiled on every build
+if current_content == content:
+    print(f"{header_output_path} is up to date ({len(html)} -> {len(compressed)} bytes)")
+else:
+    with open(header_output_path, "w", newline="\n") as f:
+        f.write(content)
+    print(f"Gzipped {html_source_path}: {len(html)} -> {len(compressed)} bytes, wrote {header_output_path}")

@@ -23,22 +23,29 @@ Refer to your board’s datasheet to identify correct pin mappings.
 
 ## Wiring
 
-The module connects to the transmitter’s SerialAUX interface using 4 wires:
+The module connects to the transmitter’s SerialAUX interface using 3 wires:
 
 * 5V
 * GND
-* TX → to pin 3 (module RX)
-* RX → to pin 4 (module TX) (optional)
+* Transmitter TX → Module RX pin: GPIO3 on ESP32-C3, GPIO16 on ESP32-S3
+
+The module only receives telemetry, so the transmitter’s RX line is not used and does not need to be connected.
 
 Wiring to a RadioMaster Pocket transmitter example
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/esp32-c3-supermini_to_rm_pocket.jpg?raw=true" width="50%" alt="Connection to RadioMaster Pocket" title="Connection to RadioMaster Pocket" />
 
-If the transmitter lacks SerialAUX, connect the ELRS/Crossfire internal module’s TX pin directly to the module’s RX (pin 3).
+If the transmitter lacks SerialAUX, connect the ELRS/Crossfire internal module’s TX pin directly to the module’s RX pin (GPIO3 on ESP32-C3, GPIO16 on ESP32-S3).
 
 Connection to internal TX on a Jumper T20 transmitter example
 
 <img src="https://github.com/BushlanovDev/ble-telemetry-lite/blob/main/images/esp32-c3-supermini_to_jumper-t20.jpg?raw=true" width="50%" alt="Connection to Jumper T20 internal TX" title="Connection to Jumper T20 internal TX" />
+
+## Automatic sleep
+
+If nothing connects to the module within 2 minutes after power-up or reboot (over Bluetooth in BLE mode, or to the access point in Wi-Fi mode), the module goes into deep sleep and is no longer visible.  
+To wake it up, press the RST button on the board or power-cycle it.  
+Once a client has connected, the timer stays off until the next reboot.
 
 ## Flashing
 

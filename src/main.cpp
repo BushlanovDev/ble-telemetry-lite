@@ -179,6 +179,7 @@ namespace {
             if (pCharacteristic->getUUID() == pCharacteristicBaudrate->getUUID()) {
                 const auto v = pCharacteristic->getValue();
                 if (v.size() < sizeof(uint32_t)) {
+                    pCharacteristic->setValue(serialBaudrate);
                     return;
                 }
 
@@ -186,6 +187,7 @@ namespace {
                 memcpy(&newBaudrate, v.data(), sizeof(uint32_t));
                 if (!isValidBaudrate(newBaudrate)) {
                     ESP_LOGW(TAG, "Rejected invalid baudrate: %u", newBaudrate);
+                    pCharacteristic->setValue(serialBaudrate);
                     return;
                 }
 
@@ -199,6 +201,7 @@ namespace {
                 const auto v = pCharacteristic->getValue();
                 if (!isValidDomainName(v.data(), v.size())) {
                     ESP_LOGW(TAG, "Rejected invalid domain name (length %u)", (unsigned)v.size());
+                    pCharacteristic->setValue(domainName);
                     return;
                 }
 
@@ -211,11 +214,13 @@ namespace {
             } else if (pCharacteristic->getUUID() == pCharacteristicMode->getUUID()) {
                 const auto v = pCharacteristic->getValue();
                 if (v.size() < 1) {
+                    pCharacteristic->setValue(mode);
                     return;
                 }
                 const uint8_t newMode = static_cast<uint8_t>(v.data()[0]);
                 if (!isValidMode(newMode)) {
                     ESP_LOGW(TAG, "Rejected invalid mode: %u", newMode);
+                    pCharacteristic->setValue(mode);
                     return;
                 }
                 mode = newMode;
@@ -623,6 +628,55 @@ static void sendData(const uint8_t *data, const size_t size) {
     }
 }
 
+static void crsfProcessByte(const uint8_t byte) {
+    if (crsfIndex == 0 &&
+        byte != CRSF_ADDRESS_RADIO &&
+        byte != CRSF_ADDRESS_RX &&
+        byte != CRSF_ADDRESS_TX &&
+        byte != CRSF_SYNC_BYTE
+    ) {
+        return;
+    }
+
+    crsfBuffer[crsfIndex++] = byte;
+    if (crsfIndex < 2) {
+        return;
+    }
+
+    if (crsfIndex == 2) {
+        const uint8_t payloadLength = crsfBuffer[1];
+        if (payloadLength > CRSF_MAX_PAYLOAD_SIZE || payloadLength < CRSF_MIN_PAYLOAD_SIZE) {
+            ESP_LOGI(TAG, "CRSF incorrect packet size skipped length:(%d)", payloadLength);
+            crsfIndex = 0;
+        }
+        return;
+    }
+
+    const uint8_t expectedLength = crsfBuffer[1] + 2;
+    if (crsfIndex != expectedLength) {
+        return;
+    }
+    crsfIndex = 0;
+
+    const uint8_t inCrc = crsfBuffer[expectedLength - 1];
+    const uint8_t crc = crsfCrc.calc(&crsfBuffer[2], expectedLength - 3);
+    if (inCrc != crc) {
+        ESP_LOGI(TAG, "CRSF incorrect packet crc 0x%02x != 0x%02x", inCrc, crc);
+        return;
+    }
+
+    diagFrames++;
+
+    const uint8_t type = crsfBuffer[2];
+    if (type == CRSF_PING_PACKET_ID || type == CRSF_RC_SYNC_PACKET_ID) {
+        ESP_LOGI(TAG, "CRSF ping or sync packet skipped type:(0x%02x) length:(%d)", type, expectedLength);
+        return;
+    }
+
+    packetCount++;
+    sendData(crsfBuffer, expectedLength);
+}
+
 static void initLog() {
     Serial.begin(DEFAULT_SERIAL_BAUDRATE);
     Serial.setDebugOutput(true);
@@ -683,10 +737,14 @@ void setup() {
     startTime = millis();
 }
 
-void IRAM_ATTR loop() {
+void loop() {
     if (mode == MODE_WEB) {
         dnsServer.processNextRequest();
-        ws.cleanupClients();
+        static unsigned long lastWsCleanup = 0;
+        if (millis() - lastWsCleanup >= WS_CLEANUP_PERIOD_MS) {
+            lastWsCleanup = millis();
+            ws.cleanupClients();
+        }
     }
     if (pendingRestart && millis() - restartRequestTime >= RESTART_DELAY_MS) {
         esp_restart();
@@ -745,52 +803,19 @@ void IRAM_ATTR loop() {
         packetCount = 0;
     }
 
-    while (SerialPort.available()) {
-        const uint8_t byte = SerialPort.read();
-        diagBytes++;
-        if (crsfIndex == 0 &&
-            byte != CRSF_ADDRESS_RADIO &&
-            byte != CRSF_ADDRESS_RX &&
-            byte != CRSF_ADDRESS_TX &&
-            byte != CRSF_SYNC_BYTE
-        ) {
-            continue;
+    bool uartIdle = true;
+    int available;
+    while ((available = SerialPort.available()) > 0) {
+        static uint8_t chunk[UART_READ_CHUNK_SIZE];
+        const size_t toRead = (size_t)available < sizeof(chunk) ? (size_t)available : sizeof(chunk);
+        const size_t count = SerialPort.read(chunk, toRead);
+        if (count == 0) {
+            break;
         }
-
-        crsfBuffer[crsfIndex++] = byte;
-        if (crsfIndex == 2) {
-            const uint8_t expectedLength = crsfBuffer[1];
-            if (expectedLength > CRSF_MAX_PAYLOAD_SIZE || expectedLength < CRSF_MIN_PAYLOAD_SIZE) {
-                ESP_LOGI(TAG, "CRSF incorrect packet size skipped length:(%d)", expectedLength);
-                crsfIndex = 0;
-                continue;
-            }
-        } else if (crsfIndex > 2) {
-            const uint8_t expectedLength = crsfBuffer[1] + 2;
-            if (crsfIndex == expectedLength) {
-                const uint8_t inCrc = crsfBuffer[expectedLength - 1];
-                const uint8_t crc = crsfCrc.calc(&crsfBuffer[2], expectedLength - 3);
-                if (inCrc != crc) {
-                    memset(crsfBuffer, 0, expectedLength);
-                    crsfIndex = 0;
-                    ESP_LOGI(TAG, "CRSF incorrect packet crc 0x%02x != 0x%02x", inCrc, crc);
-                    continue;
-                }
-
-                diagFrames++;
-
-                const uint8_t type = crsfBuffer[2];
-                if (type == CRSF_PING_PACKET_ID || type == CRSF_RC_SYNC_PACKET_ID) {
-                    ESP_LOGI(TAG, "CRSF ping or sync packet skipped type:(0x%02x) length:(%d)", type, expectedLength);
-                } else {
-                    packetCount++;
-                    sendData(crsfBuffer, expectedLength);
-                }
-
-                memset(crsfBuffer, 0, expectedLength);
-                crsfIndex = 0;
-                continue;
-            }
+        uartIdle = false;
+        diagBytes += count;
+        for (size_t i = 0; i < count; i++) {
+            crsfProcessByte(chunk[i]);
         }
     }
 
@@ -808,5 +833,9 @@ void IRAM_ATTR loop() {
             ESP_LOGI(TAG, "Sending empty link stats packet");
         }
         packetCount = 0;
+    }
+
+    if (uartIdle) {
+        delay(1); // nothing arrived during this pass: let the CPU idle for a tick instead of spinning
     }
 }
